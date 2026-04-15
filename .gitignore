@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+
+# ai-memory extraction state (machine-specific)
+.ai-memory/.state.json

@@ -1,0 +1,28 @@
+{
+  "sources": {
+    "cursor": {
+      "enabled": true,
+      "projectName": "ai-memory"
+    },
+    "claudeCode": {
+      "enabled": true
+    }
+  },
+  "extract": {
+    "types": [
+      "decision",
+      "architecture",
+      "convention",
+      "todo",
+      "issue"
+    ],
+    "ignoreConversations": [],
+    "minConversationLength": 5
+  },
+  "output": {
+    "dir": ".ai-memory",
+    "summaryFile": "SUMMARY.md",
+    "language": "zh"
+  },
+  "model": ""
+}

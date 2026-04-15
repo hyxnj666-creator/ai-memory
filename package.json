@@ -1,0 +1,60 @@
+{
+  "name": "ai-memory",
+  "version": "0.1.0",
+  "description": "Extract structured knowledge from AI editor conversations (Cursor, Claude Code) into git-trackable files",
+  "type": "module",
+  "bin": {
+    "ai-memory": "./dist/index.js"
+  },
+  "main": "./dist/public.js",
+  "types": "./dist/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "cursor",
+    "claude-code",
+    "knowledge-extraction",
+    "conversation-history",
+    "developer-tools",
+    "cli"
+  ],
+  "author": "Conor Liu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/conorliu/ai-memory"
+  },
+  "homepage": "https://github.com/conorliu/ai-memory#readme",
+  "bugs": {
+    "url": "https://github.com/conorliu/ai-memory/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}
