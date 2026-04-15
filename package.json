@@ -1,10 +1,10 @@
 {
-  "name": "ai-memory",
-  "version": "0.1.0",
+  "name": "ai-memory-cli",
+  "version": "1.1.0",
   "description": "Extract structured knowledge from AI editor conversations (Cursor, Claude Code) into git-trackable files",
   "type": "module",
   "bin": {
-    "ai-memory": "./dist/index.js"
+    "ai-memory": "dist/index.js"
   },
   "main": "./dist/public.js",
   "types": "./dist/public.d.ts",
