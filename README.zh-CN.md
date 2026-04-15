@@ -5,7 +5,7 @@
 不再让技术决策、架构设计和 TODO 埋没在聊天记录里。
 
 ```bash
-npx ai-memory extract --incremental
+npx ai-memory-cli extract --incremental
 ```
 
 > **[English README](README.md)**

@@ -5,7 +5,7 @@ Extract structured knowledge from AI editor conversations (Cursor, Claude Code) 
 Stop losing technical decisions, architecture notes, and TODOs buried in chat history.
 
 ```bash
-npx ai-memory extract --incremental
+npx ai-memory-cli extract --incremental
 ```
 
 > **[中文文档](README.zh-CN.md)**
