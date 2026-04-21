@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -90,6 +90,8 @@ export interface CliOptions {
   includeResolved?: boolean;
   /** Positional args (e.g. file paths for resolve) */
   positionalArgs?: string[];
+  /** MCP server debug mode */
+  debug?: boolean;
 }
 
 // --- Config Types ---

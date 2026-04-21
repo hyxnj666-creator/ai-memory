@@ -176,6 +176,45 @@ npx ai-memory-cli init
 
 ---
 
+## MCP Server（新功能）
+
+ai-memory 可以作为 **MCP Server** 运行，让 AI 编辑器（Cursor、Claude Code）直接访问你的知识库 — 无需手动执行命令。
+
+### 配置
+
+在 Cursor MCP 配置中添加（`.cursor/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "npx",
+      "args": ["ai-memory-cli", "serve"]
+    }
+  }
+}
+```
+
+### AI 获得的能力
+
+| MCP 能力 | 功能 |
+|---|---|
+| `remember` 工具 | AI 在对话中主动存储决策/约定/待办 |
+| `recall` 工具 | AI 根据当前任务自动检索相关记忆 |
+| `search_memories` 工具 | 完整搜索，支持类型/作者/归档过滤 |
+| `project-context` 资源 | 开始对话时自动提供项目上下文 |
+
+配置完成后，AI 会自动记住重要决策并在未来的会话中召回 — 不需要你执行任何命令。
+
+### 手动启动（用于测试）
+
+```bash
+npx ai-memory-cli serve           # 启动 MCP server
+npx ai-memory-cli serve --debug   # 带调试日志
+```
+
+---
+
 ## 支持的来源
 
 | 来源                  | 数据位置                                         | 状态             |

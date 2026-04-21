@@ -25,6 +25,7 @@ Commands:
   summary     Generate a project-level summary
   context     Generate a continuation prompt for new sessions
   init        Initialize config and detect editors
+  serve       Start MCP server (for Cursor, Claude Code, etc.)
 
 List options:
   --source <type>       Filter by source: cursor, claude-code
@@ -62,6 +63,9 @@ Context options:
   --summarize           Use LLM to generate a condensed prose summary (slower, costs tokens)
   --include-resolved    Include resolved memories
 
+Serve options:
+  --debug               Show debug logs on stderr
+
 Team options:
   --author <name>       Override auto-detected author name
   --all-authors         Include all authors' memories (summary/context)
@@ -83,7 +87,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve"].includes(command)) {
     return { command: "help" };
   }
 
@@ -190,6 +194,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break;
       case "--undo":
         opts.undo = true;
+        break;
+      case "--debug":
+        opts.debug = true;
         break;
     }
   }

@@ -11,7 +11,7 @@ export default defineConfig([
     clean: true,
     sourcemap: true,
     define: { __VERSION__: JSON.stringify(version) },
-    external: ["node:sqlite"],
+    external: ["node:sqlite", "@modelcontextprotocol/sdk", "zod"],
     banner: {
       js: "#!/usr/bin/env node",
     },
