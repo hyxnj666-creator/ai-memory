@@ -101,6 +101,10 @@ export function printWarning(msg: string): void {
   console.log(`[!] ${msg}`);
 }
 
+export function printSuccess(msg: string): void {
+  console.log(`\n${ANSI.green}[✓]${ANSI.reset} ${msg}`);
+}
+
 export function printNoConversations(): void {
   console.log(`\n[~] No conversations matched your filters.`);
   console.log(

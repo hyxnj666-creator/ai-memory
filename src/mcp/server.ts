@@ -6,7 +6,7 @@ import { registerResources } from "./resources.js";
 export async function startMcpServer(debug = false): Promise<void> {
   const server = new McpServer({
     name: "ai-memory",
-    version: "1.5.0",
+    version: "2.0.0",
   });
 
   registerTools(server, debug);

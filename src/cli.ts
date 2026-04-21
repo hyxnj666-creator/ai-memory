@@ -26,6 +26,7 @@ Commands:
   context     Generate a continuation prompt for new sessions
   init        Initialize config and detect editors
   serve       Start MCP server (for Cursor, Claude Code, etc.)
+  reindex     Build/rebuild semantic search embeddings
 
 List options:
   --source <type>       Filter by source: cursor, claude-code
@@ -87,7 +88,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex"].includes(command)) {
     return { command: "help" };
   }
 

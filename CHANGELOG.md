@@ -1,20 +1,29 @@
 # Changelog
 
-## [1.5.0] - 2026-04-21
+## [2.0.0] - 2026-04-21
 
-### Added
+### Added — MCP Server
 - **MCP Server** — ai-memory can now run as an MCP (Model Context Protocol) server, enabling AI editors like Cursor and Claude Code to directly access your project's knowledge base
-- **`remember` tool** — AI can store decisions, conventions, architecture notes, todos, and issues during conversations
-- **`recall` tool** — AI can retrieve relevant memories by topic with keyword scoring
-- **`search_memories` tool** — Full-text search with type, author, and resolved status filtering
+- **`remember` tool** — AI can store decisions, conventions, architecture notes, todos, and issues during conversations (auto-indexes embeddings)
+- **`recall` tool** — AI can retrieve relevant memories using hybrid semantic + keyword search
+- **`search_memories` tool** — Full search with type, author, and resolved status filtering via MCP
 - **`project-context` resource** — Automatically provides project context to AI when starting a conversation
 - **`serve` command** — New CLI command to start the MCP server (`npx ai-memory-cli serve`)
 - **`--debug` flag** — Debug logging for MCP server (outputs to stderr)
 
+### Added — Semantic Search
+- **Hybrid search engine** — combines semantic similarity (embeddings), keyword matching, and time decay (recency) into a single ranked result set
+- **Embedding API client** — uses the same OpenAI-compatible API already configured for extraction, calls `/embeddings` endpoint with batch support
+- **Flat-file vector store** — embeddings stored as `.ai-memory/.embeddings.json` (local-only, gitignored), zero external dependencies
+- **`reindex` command** — build or rebuild semantic search embeddings (`npx ai-memory-cli reindex`)
+- **Auto-indexing** — `remember` tool automatically indexes new memories for instant semantic retrieval
+- **24 new unit tests** for vector store, cosine similarity, hybrid search, and keyword search
+
 ### Changed
+- MCP `recall` and `search_memories` now use hybrid search (semantic + keyword + recency) instead of keyword-only
 - Added `@modelcontextprotocol/sdk` and `zod` as runtime dependencies
 - Externalized MCP SDK and zod from the bundle (loaded from node_modules at runtime)
-- Updated README (EN & ZH) with MCP Server setup instructions
+- Updated README (EN & ZH) with MCP Server setup and semantic search instructions
 
 ## [1.4.1] - 2026-04-17
 

@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
