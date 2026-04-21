@@ -7,7 +7,7 @@ import { printBanner } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
 
 const CONFIG_PATH = ".ai-memory/.config.json";
-const STATE_GITIGNORE_ENTRY = ".ai-memory/.state.json";
+const GITIGNORE_ENTRIES = [".ai-memory/.state.json", ".ai-memory/.embeddings.json"];
 const GITIGNORE_PATH = ".gitignore";
 
 async function safeRead(path: string): Promise<string | null> {
@@ -19,10 +19,11 @@ async function safeRead(path: string): Promise<string | null> {
 }
 
 async function updateGitignore(): Promise<boolean> {
-  const existing = await safeRead(GITIGNORE_PATH);
-  if (existing?.includes(STATE_GITIGNORE_ENTRY)) return false;
+  const existing = await safeRead(GITIGNORE_PATH) ?? "";
+  const missing = GITIGNORE_ENTRIES.filter((e) => !existing.includes(e));
+  if (missing.length === 0) return false;
 
-  const entry = `\n# ai-memory extraction state (machine-specific)\n${STATE_GITIGNORE_ENTRY}\n`;
+  const entry = `\n# ai-memory local state (machine-specific)\n${missing.join("\n")}\n`;
   await appendFile(GITIGNORE_PATH, entry, "utf-8");
   return true;
 }
@@ -97,9 +98,9 @@ export async function runInit(opts: CliOptions): Promise<number> {
   const updated = await updateGitignore();
   if (!opts.json) {
     if (updated) {
-      console.log(`[+] Added ${STATE_GITIGNORE_ENTRY} to .gitignore`);
+      console.log(`[+] Added .state.json and .embeddings.json to .gitignore`);
     } else {
-      console.log(`    .gitignore already contains ${STATE_GITIGNORE_ENTRY}`);
+      console.log(`    .gitignore already up to date`);
     }
   }
 

@@ -26,19 +26,19 @@ The CLI foundation is complete and published.
 
 **Goal: Make ai-memory invisible.** Instead of running CLI commands, AI editors interact with memories automatically via MCP.
 
-### Phase 1: MCP Server Core
-- [ ] `ai-memory serve` — start MCP server (stdio transport)
-- [ ] `remember` tool — AI stores knowledge during conversations
-- [ ] `recall` tool — AI retrieves relevant memories for current task
-- [ ] `search` tool — keyword + filter search via MCP
-- [ ] `project-context` resource — auto-provide project context to AI
-- [ ] One-line setup: add to Cursor/Claude Code MCP config
+### Phase 1: MCP Server Core ✅
+- [x] `ai-memory serve` — start MCP server (stdio transport)
+- [x] `remember` tool — AI stores knowledge during conversations
+- [x] `recall` tool — AI retrieves relevant memories for current task
+- [x] `search_memories` tool — keyword + filter search via MCP
+- [x] `project-context` resource — auto-provide project context to AI
+- [x] One-line setup: add to Cursor/Claude Code MCP config
 
-### Phase 2: Semantic Search
-- [ ] Local embedding generation (lightweight model or API)
-- [ ] Vector storage (SQLite vec extension or flat file)
-- [ ] Hybrid retrieval: semantic + keyword + time decay
-- [ ] Automatic re-indexing on memory changes
+### Phase 2: Semantic Search ✅
+- [x] Embedding generation via OpenAI-compatible API
+- [x] Flat-file vector storage (`.embeddings.json`, zero deps)
+- [x] Hybrid retrieval: semantic + keyword + time decay
+- [x] Automatic re-indexing on `remember`, manual via `reindex` command
 
 ### Phase 3: More Sources + Watch Mode
 - [ ] Windsurf conversation support

@@ -153,6 +153,72 @@ npx ai-memory-cli init                             # detect editors, create conf
 
 ---
 
+## MCP Server (NEW)
+
+ai-memory can run as an **MCP server**, giving AI editors (Cursor, Claude Code) direct access to your knowledge base — no manual commands needed.
+
+### Setup
+
+Add to your Cursor MCP config (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "npx",
+      "args": ["ai-memory-cli", "serve"]
+    }
+  }
+}
+```
+
+Or for Claude Code (`.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "npx",
+      "args": ["ai-memory-cli", "serve"]
+    }
+  }
+}
+```
+
+### What the AI gets
+
+| MCP Capability | What it does |
+|---|---|
+| `remember` tool | AI stores decisions/conventions/todos during conversations (auto-indexed) |
+| `recall` tool | AI retrieves relevant memories using semantic + keyword hybrid search |
+| `search_memories` tool | Full search with type/author/resolved filtering, semantic-aware |
+| `project-context` resource | Auto-provides project context when starting a conversation |
+
+Once configured, the AI can automatically remember important decisions and recall them in future sessions — without you running any commands.
+
+### Semantic Search
+
+ai-memory uses **hybrid search** combining semantic similarity (via embeddings), keyword matching, and time decay. This means you can search by meaning, not just exact keywords.
+
+```bash
+# Build search index (uses your existing LLM API for embeddings)
+npx ai-memory-cli reindex
+
+# Now search works semantically — "database choice" finds "PostgreSQL decision"
+npx ai-memory-cli search "database choice"
+```
+
+The MCP `recall` and `search_memories` tools use hybrid search automatically. Embeddings are stored locally in `.ai-memory/.embeddings.json` and auto-indexed when using the `remember` tool.
+
+### Manual start (for testing)
+
+```bash
+npx ai-memory-cli serve           # start MCP server
+npx ai-memory-cli serve --debug   # with debug logging
+```
+
+---
+
 ## Supported Sources
 
 | Source | Data location | Status |

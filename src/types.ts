@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -90,6 +90,8 @@ export interface CliOptions {
   includeResolved?: boolean;
   /** Positional args (e.g. file paths for resolve) */
   positionalArgs?: string[];
+  /** MCP server debug mode */
+  debug?: boolean;
 }
 
 // --- Config Types ---
@@ -110,6 +112,8 @@ export interface AiMemoryConfig {
     language: "zh" | "en";
   };
   model: string;
+  /** Embedding model for semantic search (default: text-embedding-3-small) */
+  embeddingModel?: string;
   /** Author name for team mode (auto-detected from git if not set) */
   author?: string;
 }

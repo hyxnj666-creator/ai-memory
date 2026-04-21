@@ -25,6 +25,8 @@ Commands:
   summary     Generate a project-level summary
   context     Generate a continuation prompt for new sessions
   init        Initialize config and detect editors
+  serve       Start MCP server (for Cursor, Claude Code, etc.)
+  reindex     Build/rebuild semantic search embeddings
 
 List options:
   --source <type>       Filter by source: cursor, claude-code
@@ -44,8 +46,11 @@ Summary options:
   --focus <topic>       Focus on a specific topic
 
 Search options:
-  search <query>        Search memories by keyword
+  search <query>        Search memories (hybrid: semantic + keyword)
   --type <types>        Filter by memory type
+
+Reindex options:
+  --force               Rebuild all embeddings from scratch
 
 Rules options:
   --output <path>       Output path (default: .cursor/rules/ai-memory-conventions.mdc)
@@ -61,6 +66,9 @@ Context options:
   --output <file>       Write context to file instead of stdout
   --summarize           Use LLM to generate a condensed prose summary (slower, costs tokens)
   --include-resolved    Include resolved memories
+
+Serve options:
+  --debug               Show debug logs on stderr
 
 Team options:
   --author <name>       Override auto-detected author name
@@ -83,7 +91,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex"].includes(command)) {
     return { command: "help" };
   }
 
@@ -190,6 +198,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break;
       case "--undo":
         opts.undo = true;
+        break;
+      case "--debug":
+        opts.debug = true;
         break;
     }
   }

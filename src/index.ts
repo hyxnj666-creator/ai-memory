@@ -7,6 +7,8 @@ import { runInit } from "./commands/init.js";
 import { runSearch } from "./commands/search.js";
 import { runRules } from "./commands/rules.js";
 import { runResolve } from "./commands/resolve.js";
+import { runReindex } from "./commands/reindex.js";
+import { startMcpServer } from "./mcp/server.js";
 import { printError } from "./output/terminal.js";
 
 function run(p: Promise<number>): void {
@@ -48,6 +50,15 @@ switch (opts.command) {
     break;
   case "resolve":
     run(runResolve(opts));
+    break;
+  case "reindex":
+    run(runReindex(opts));
+    break;
+  case "serve":
+    startMcpServer(opts.debug ?? false).catch((err) => {
+      printError(`MCP server failed: ${err}`);
+      process.exitCode = 1;
+    });
     break;
   default:
     printError(`Unknown command. Run "ai-memory --help" for usage.`);

@@ -176,6 +176,59 @@ npx ai-memory-cli init
 
 ---
 
+## MCP Server（新功能）
+
+ai-memory 可以作为 **MCP Server** 运行，让 AI 编辑器（Cursor、Claude Code）直接访问你的知识库 — 无需手动执行命令。
+
+### 配置
+
+在 Cursor MCP 配置中添加（`.cursor/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "npx",
+      "args": ["ai-memory-cli", "serve"]
+    }
+  }
+}
+```
+
+### AI 获得的能力
+
+| MCP 能力 | 功能 |
+|---|---|
+| `remember` 工具 | AI 在对话中主动存储决策/约定/待办（自动生成嵌入索引） |
+| `recall` 工具 | AI 使用语义+关键词混合搜索检索相关记忆 |
+| `search_memories` 工具 | 完整搜索，支持类型/作者/归档过滤，语义感知 |
+| `project-context` 资源 | 开始对话时自动提供项目上下文 |
+
+配置完成后，AI 会自动记住重要决策并在未来的会话中召回 — 不需要你执行任何命令。
+
+### 语义搜索
+
+ai-memory 使用**混合搜索**，结合语义相似度（嵌入向量）、关键词匹配和时间衰减。你可以按语义搜索，而不仅仅是精确关键词。
+
+```bash
+# 构建搜索索引（使用已配置的 LLM API 生成嵌入）
+npx ai-memory-cli reindex
+
+# 语义搜索 — "数据库选型" 能找到 "PostgreSQL 决策"
+npx ai-memory-cli search "数据库选型"
+```
+
+MCP 的 `recall` 和 `search_memories` 工具自动使用混合搜索。嵌入向量存储在本地的 `.ai-memory/.embeddings.json`，使用 `remember` 工具时自动索引。
+
+### 手动启动（用于测试）
+
+```bash
+npx ai-memory-cli serve           # 启动 MCP server
+npx ai-memory-cli serve --debug   # 带调试日志
+```
+
+---
+
 ## 支持的来源
 
 | 来源                  | 数据位置                                         | 状态             |
