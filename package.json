@@ -1,6 +1,6 @@
 {
   "name": "ai-memory-cli",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Extract structured knowledge from AI editor conversations (Cursor, Claude Code) into git-trackable files",
   "type": "module",
   "bin": {

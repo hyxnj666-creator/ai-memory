@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0] - 2026-04-21
+
+### Added
+- **MCP Server** — ai-memory can now run as an MCP (Model Context Protocol) server, enabling AI editors like Cursor and Claude Code to directly access your project's knowledge base
+- **`remember` tool** — AI can store decisions, conventions, architecture notes, todos, and issues during conversations
+- **`recall` tool** — AI can retrieve relevant memories by topic with keyword scoring
+- **`search_memories` tool** — Full-text search with type, author, and resolved status filtering
+- **`project-context` resource** — Automatically provides project context to AI when starting a conversation
+- **`serve` command** — New CLI command to start the MCP server (`npx ai-memory-cli serve`)
+- **`--debug` flag** — Debug logging for MCP server (outputs to stderr)
+
+### Changed
+- Added `@modelcontextprotocol/sdk` and `zod` as runtime dependencies
+- Externalized MCP SDK and zod from the bundle (loaded from node_modules at runtime)
+- Updated README (EN & ZH) with MCP Server setup instructions
+
 ## [1.4.1] - 2026-04-17
 
 ### Added
