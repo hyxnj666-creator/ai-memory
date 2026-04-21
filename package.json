@@ -1,7 +1,7 @@
 {
   "name": "ai-memory-cli",
   "version": "2.0.0",
-  "description": "Extract structured knowledge from AI editor conversations (Cursor, Claude Code) into git-trackable files",
+  "description": "AI memory layer for code editors — extract knowledge, MCP server, semantic search (Cursor, Claude Code)",
   "type": "module",
   "bin": {
     "ai-memory": "dist/index.js"
@@ -32,7 +32,9 @@
     "cli",
     "mcp",
     "model-context-protocol",
-    "mcp-server"
+    "mcp-server",
+    "semantic-search",
+    "embeddings"
   ],
   "author": "Conor Liu",
   "license": "MIT",

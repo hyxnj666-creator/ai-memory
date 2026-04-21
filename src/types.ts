@@ -112,6 +112,8 @@ export interface AiMemoryConfig {
     language: "zh" | "en";
   };
   model: string;
+  /** Embedding model for semantic search (default: text-embedding-3-small) */
+  embeddingModel?: string;
   /** Author name for team mode (auto-detected from git if not set) */
   author?: string;
 }

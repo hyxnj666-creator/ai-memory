@@ -60,7 +60,7 @@ export function registerTools(server: McpServer, debug: boolean): void {
         await writeMemories([memory], config.output.dir, config.output.language, { author });
 
         // Auto-index embedding (best-effort, don't fail if API unavailable)
-        const embedded = await indexSingleMemory(memory, config.output.dir);
+        const embedded = await indexSingleMemory(memory, config.output.dir, config.embeddingModel);
         if (debug) {
           process.stderr.write(`[ai-memory-mcp] Remembered: ${type} — ${title}${embedded ? " (embedded)" : ""}\n`);
         }
@@ -93,7 +93,7 @@ export function registerTools(server: McpServer, debug: boolean): void {
         const outputDir = config.output.dir;
         const memories = await readAllMemories(outputDir);
         const store = await loadVectorStore(outputDir);
-        const embConfig = resolveEmbeddingConfig();
+        const embConfig = resolveEmbeddingConfig(config.embeddingModel);
 
         const results = await hybridSearch(query, memories, store, embConfig, {
           limit,
@@ -141,7 +141,7 @@ export function registerTools(server: McpServer, debug: boolean): void {
         const config = await loadConfig();
         const memories = await readAllMemories(config.output.dir, author || undefined);
         const store = await loadVectorStore(config.output.dir);
-        const embConfig = resolveEmbeddingConfig();
+        const embConfig = resolveEmbeddingConfig(config.embeddingModel);
 
         const scored = await hybridSearch(query, memories, store, embConfig, {
           limit,

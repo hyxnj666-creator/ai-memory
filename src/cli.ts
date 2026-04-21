@@ -46,8 +46,11 @@ Summary options:
   --focus <topic>       Focus on a specific topic
 
 Search options:
-  search <query>        Search memories by keyword
+  search <query>        Search memories (hybrid: semantic + keyword)
   --type <types>        Filter by memory type
+
+Reindex options:
+  --force               Rebuild all embeddings from scratch
 
 Rules options:
   --output <path>       Output path (default: .cursor/rules/ai-memory-conventions.mdc)

@@ -6,7 +6,7 @@
  */
 
 import type { ExtractedMemory } from "../types.js";
-import type { VectorStore, SemanticResult } from "./vector-store.js";
+import type { VectorStore } from "./vector-store.js";
 import { memoryId, searchByVector } from "./vector-store.js";
 import { embedText, type EmbeddingConfig } from "./embed.js";
 
@@ -112,8 +112,6 @@ export async function hybridSearch(
   if (embeddingConfig && Object.keys(store.entries).length > 0) {
     try {
       const queryVec = await embedText(query, embeddingConfig);
-      const idMap = new Map(filtered.map((m) => [memoryId(m), m]));
-
       const semResults = searchByVector(store, queryVec, filtered.length);
       const semMap = new Map(semResults.map((r) => [r.entry.id, r.similarity]));
 

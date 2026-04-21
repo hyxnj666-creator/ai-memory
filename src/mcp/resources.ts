@@ -2,7 +2,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { readAllMemories } from "../store/memory-store.js";
 import { buildDirectContext, type MemoryForContext } from "../extractor/prompts.js";
 import { loadConfig } from "../config.js";
-import { resolveAuthor } from "../utils/author.js";
 
 function toContextMemory(m: { type: string; title: string; date: string; content: string; context?: string; reasoning?: string; alternatives?: string; impact?: string; sourceTitle?: string }): MemoryForContext {
   return {

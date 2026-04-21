@@ -1,8 +1,11 @@
-import type { CliOptions, ExtractedMemory, MemoryType } from "../types.js";
+import type { CliOptions } from "../types.js";
 import { readAllMemories } from "../store/memory-store.js";
 import { loadConfig } from "../config.js";
 import { resolveAuthor } from "../utils/author.js";
 import { printBanner, printError, ANSI as COL } from "../output/terminal.js";
+import { hybridSearch } from "../embeddings/hybrid-search.js";
+import { loadVectorStore } from "../embeddings/vector-store.js";
+import { resolveEmbeddingConfig } from "../embeddings/embed.js";
 
 const TYPE_ICON: Record<string, string> = {
   decision: "D",
@@ -24,22 +27,6 @@ function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen - 3) + "...";
 }
 
-function matchScore(m: ExtractedMemory, keywords: string[]): number {
-  let score = 0;
-  const titleLower = m.title.toLowerCase();
-  const contentLower = m.content.toLowerCase();
-  const contextLower = (m.context || "").toLowerCase();
-
-  for (const kw of keywords) {
-    if (titleLower.includes(kw)) score += 10;
-    if (contentLower.includes(kw)) score += 5;
-    if (contextLower.includes(kw)) score += 2;
-    if (m.reasoning?.toLowerCase().includes(kw)) score += 1;
-    if (m.impact?.toLowerCase().includes(kw)) score += 1;
-  }
-  return score;
-}
-
 export async function runSearch(opts: CliOptions): Promise<number> {
   if (!opts.json) printBanner();
 
@@ -53,22 +40,15 @@ export async function runSearch(opts: CliOptions): Promise<number> {
   const outputDir = config.output.dir;
   const author = opts.allAuthors ? undefined : await resolveAuthor(config, opts.author);
 
-  let memories = await readAllMemories(outputDir, author);
+  const memories = await readAllMemories(outputDir, author);
+  const store = await loadVectorStore(outputDir);
+  const embConfig = resolveEmbeddingConfig(config.embeddingModel);
 
-  if (opts.types?.length) {
-    const typeSet = new Set<string>(opts.types);
-    memories = memories.filter((m) => typeSet.has(m.type));
-  }
-
-  if (!opts.includeResolved) {
-    memories = memories.filter((m) => m.status !== "resolved");
-  }
-
-  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const scored = memories
-    .map((m) => ({ memory: m, score: matchScore(m, keywords) }))
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score);
+  const scored = await hybridSearch(query, memories, store, embConfig, {
+    limit: 20,
+    type: opts.types?.join(","),
+    includeResolved: opts.includeResolved,
+  });
 
   if (scored.length === 0) {
     if (opts.json) {
@@ -89,14 +69,18 @@ export async function runSearch(opts: CliOptions): Promise<number> {
         content: s.memory.content,
         author: s.memory.author,
         score: s.score,
+        semanticScore: s.semanticScore,
+        keywordScore: s.keywordScore,
       })),
     }));
     return 0;
   }
 
-  console.log(`\n${COL.bold}${scored.length} result${scored.length === 1 ? "" : "s"} for "${query}"${COL.reset}\n`);
+  const semCount = scored.filter((r) => r.semanticScore > 0).length;
+  const modeLabel = semCount > 0 ? ` (${semCount} semantic)` : " (keyword)";
+  console.log(`\n${COL.bold}${scored.length} result${scored.length === 1 ? "" : "s"} for "${query}"${COL.reset}${COL.dim}${modeLabel}${COL.reset}\n`);
 
-  for (const { memory: m, score } of scored.slice(0, 20)) {
+  for (const { memory: m } of scored) {
     const icon = TYPE_ICON[m.type] || "?";
     const statusTag = m.status === "resolved" ? `${COL.dim}[resolved]${COL.reset} ` : "";
     const authorTag = m.author ? `${COL.dim}@${m.author}${COL.reset} ` : "";
@@ -106,10 +90,6 @@ export async function runSearch(opts: CliOptions): Promise<number> {
     const snippet = truncate(m.content, 120);
     console.log(`      ${COL.dim}${highlight(snippet, query)}${COL.reset}`);
     console.log();
-  }
-
-  if (scored.length > 20) {
-    console.log(`${COL.dim}  ... and ${scored.length - 20} more results${COL.reset}\n`);
   }
 
   return 0;

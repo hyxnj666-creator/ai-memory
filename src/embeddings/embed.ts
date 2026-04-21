@@ -3,7 +3,7 @@
  * configured for extraction. Calls /embeddings endpoint.
  */
 
-import { resolveAiConfig, type LLMConfig } from "../extractor/llm.js";
+import { resolveAiConfig } from "../extractor/llm.js";
 
 const FETCH_TIMEOUT_MS = 60_000;
 const MAX_RETRIES = 2;
