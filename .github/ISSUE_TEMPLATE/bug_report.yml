@@ -1,0 +1,83 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill in the details below.
+
+  - type: input
+    id: version
+    attributes:
+      label: ai-memory version
+      description: "Run `npx ai-memory-cli --version`"
+      placeholder: "1.4.1"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: "Run `node -v`"
+      placeholder: "v22.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Conversation source
+      options:
+        - Cursor
+        - Claude Code
+        - Both
+        - N/A
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: "Describe the bug. What did you expect to happen?"
+      placeholder: |
+        I ran `npx ai-memory-cli extract --pick 3` and got...
+        
+        Expected: memories extracted and saved
+        Actual: error message "..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: "Minimal steps to reproduce the issue"
+      placeholder: |
+        1. Run `npx ai-memory-cli init`
+        2. Run `npx ai-memory-cli extract`
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: "Paste the full terminal output (use `--verbose` for more detail)"
+      render: shell
+    validations:
+      required: false

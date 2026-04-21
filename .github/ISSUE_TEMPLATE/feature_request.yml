@@ -1,0 +1,53 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We'd love to hear your ideas! For large features, consider writing an RFC (see docs/rfc/).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: "What problem does this solve? What's frustrating about the current behavior?"
+      placeholder: "When I switch between machines, I have to manually..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: "How would you like this to work?"
+      placeholder: "A new command `ai-memory sync` that..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: "How big is this change?"
+      options:
+        - Small (single command/flag)
+        - Medium (new feature, few files)
+        - Large (architectural change, needs RFC)
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: "What other approaches did you consider?"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'm willing to submit a PR for this feature
