@@ -7,8 +7,8 @@ import type {
 } from "../types.js";
 import { getConversationState } from "../types.js";
 import { detectSources, createSource } from "../sources/detector.js";
-import { extractMemories } from "../extractor/ai-extractor.js";
-import { writeMemories, hasMemoryFile } from "../store/memory-store.js";
+import { extractMemories, type QualityStats } from "../extractor/ai-extractor.js";
+import { writeMemories, hasMemoryFile, type WriteResult } from "../store/memory-store.js";
 import { loadState, saveState, markProcessed } from "../store/state.js";
 import { loadConfig } from "../config.js";
 import {
@@ -19,8 +19,11 @@ import {
   printExtracting,
   printSummary,
   printNoConversations,
+  printNoMemoriesExtracted,
   printError,
+  printWarning,
 } from "../output/terminal.js";
+import { resolveAuthor } from "../utils/author.js";
 
 const CONCURRENCY = 5;
 
@@ -33,6 +36,10 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   const ignoreList = new Set(config.extract.ignoreConversations ?? []);
   // Types: CLI --type overrides config, config overrides default
   const effectiveTypes = opts.types ?? (config.extract.types.length > 0 ? config.extract.types : undefined);
+
+  // 0. Resolve author
+  const author = await resolveAuthor(config, opts.author);
+  if (!opts.json) console.log(`Extracting as: ${author}\n`);
 
   // 1. Resolve sources (honor sources.*.enabled from config)
   const sources = await resolveSources(opts, config.sources);
@@ -50,17 +57,24 @@ export async function runExtract(opts: CliOptions): Promise<number> {
 
   // 3. Sort newest-first (consistent with `list` numbering), then filter
   allConversations.sort((a, b) => b.modifiedAt - a.modifiedAt);
-  const state = await loadState();
+  const state = await loadState(outputDir);
   allConversations = await filterConversations(
     allConversations,
     opts,
     state,
     outputDir,
-    ignoreList
+    ignoreList,
+    author
   );
 
   if (allConversations.length === 0) {
-    if (!opts.json) printNoConversations();
+    if (!opts.json) {
+      if (opts.pick || opts.pickId || opts.since || opts.incremental) {
+        printNoConversations();
+      } else {
+        printError("No AI editor conversations found on this machine.");
+      }
+    }
     return 0;
   }
 
@@ -81,6 +95,8 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   if (!opts.json) printExtracting(allConversations.length);
   const breakdown: Record<string, number> = {};
   let totalMemories = 0;
+  let errorCount = 0;
+  let totalQuality: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0 };
   const total = allConversations.length;
 
   // 4. Process in parallel batches of CONCURRENCY
@@ -100,6 +116,7 @@ export async function runExtract(opts: CliOptions): Promise<number> {
           conversation = await source.loadConversation(meta);
         } catch (err) {
           if (!opts.json) console.log(`   [${idx}/${total}] "${meta.title.slice(0, 48)}" — load error: ${err}`);
+          errorCount++;
           return;
         }
 
@@ -109,7 +126,7 @@ export async function runExtract(opts: CliOptions): Promise<number> {
         if (newTurnCount < minTurns) {
           if (!opts.json) console.log(`   [${idx}/${total}] "${meta.title.slice(0, 48)}" — skipped (too short)`);
           markProcessed(state, meta.id, newTurnCount);
-          await saveState(state);
+          await saveState(state, outputDir);
           return;
         }
 
@@ -125,24 +142,32 @@ export async function runExtract(opts: CliOptions): Promise<number> {
           console.log(`   [${idx}/${total}] "${meta.title.slice(0, 45)}" (${dateStr})${incrementalNote} — extracting...`);
         }
 
-        // Extract memories (pass effective types and config model)
         const extractOpts = { ...opts, types: effectiveTypes };
         let memories: ExtractedMemory[];
         try {
-          memories = await extractMemories(conversation, extractOpts, fromTurn, config.model || undefined);
+          const result = await extractMemories(conversation, extractOpts, fromTurn, config.model || undefined);
+          memories = result.memories;
+          totalQuality.total += result.qualityStats.total;
+          totalQuality.kept += result.qualityStats.kept;
+          totalQuality.filteredShort += result.qualityStats.filteredShort;
+          totalQuality.filteredDuplicate += result.qualityStats.filteredDuplicate;
         } catch (err) {
           if (!opts.json) console.log(`   [${idx}/${total}] "${meta.title.slice(0, 45)}" — error: ${err}`);
+          errorCount++;
           return;
         }
 
-        // Write files (with configured language)
+        // Attach author to each memory
+        for (const m of memories) m.author = author;
+
+        // Write files (with configured language, author subdirectory)
         if (memories.length > 0) {
-          await writeMemories(memories, outputDir, config.output.language);
+          await writeMemories(memories, outputDir, config.output.language, { force: opts.force, author });
         }
 
         // Save state immediately after each conversation (mutex-serialised)
         markProcessed(state, meta.id, newTurnCount);
-        await saveState(state);
+        await saveState(state, outputDir);
 
         // Accumulate stats
         for (const m of memories) {
@@ -168,14 +193,26 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   }
 
   if (totalMemories === 0) {
-    if (!opts.json) printNoConversations();
-    return 0;
+    if (!opts.json) {
+      if (errorCount > 0 && errorCount >= total) {
+        printError(`All ${errorCount} conversation(s) failed. Check your API key and network.`);
+      } else if (errorCount > 0) {
+        printWarning(`${errorCount} conversation(s) failed, remaining had no extractable knowledge.`);
+      } else {
+        printNoMemoriesExtracted(total);
+      }
+    }
+    return errorCount > 0 ? 1 : 0;
   }
 
+  const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate;
   if (opts.json) {
-    console.log(JSON.stringify({ total: totalMemories, breakdown }));
+    console.log(JSON.stringify({ total: totalMemories, breakdown, qualityFiltered: qualityDropped }));
   } else {
     printSummary(totalMemories, outputDir, breakdown);
+    if (qualityDropped > 0) {
+      console.log(`   (${qualityDropped} low-quality filtered: ${totalQuality.filteredShort} too short, ${totalQuality.filteredDuplicate} title≈content)`);
+    }
   }
 
   return 0;
@@ -183,10 +220,11 @@ export async function runExtract(opts: CliOptions): Promise<number> {
 
 async function resolveSources(
   opts: CliOptions,
-  sourcesConfig?: { cursor: { enabled: boolean }; claudeCode: { enabled: boolean } }
+  sourcesConfig?: { cursor: { enabled: boolean; projectName?: string }; claudeCode: { enabled: boolean } }
 ): Promise<Source[]> {
+  const projectName = sourcesConfig?.cursor?.projectName;
   if (opts.source) {
-    const source = createSource(opts.source);
+    const source = createSource(opts.source, projectName);
     const ok = await source.detect();
     if (!ok) {
       printError(`Source "${opts.source}" not available on this machine.`);
@@ -196,7 +234,7 @@ async function resolveSources(
   }
 
   if (!opts.json) printDetecting();
-  const { available, unavailable } = await detectSources();
+  const { available, unavailable } = await detectSources(projectName);
 
   // Filter by sources.*.enabled from config
   const filtered = available.filter((s) => {
@@ -224,7 +262,8 @@ async function filterConversations(
   opts: CliOptions,
   state: ExtractionState,
   outputDir: string,
-  ignoreList: Set<string>
+  ignoreList: Set<string>,
+  author?: string
 ): Promise<ConversationMeta[]> {
   let filtered = conversations;
 
@@ -235,7 +274,18 @@ async function filterConversations(
 
   // --pick 3  or  --pick 1,4,7  (1-based, relative to sorted list)
   if (opts.pick) {
-    const indices = new Set(opts.pick.split(",").map((s) => parseInt(s.trim(), 10) - 1));
+    const raw = opts.pick.split(",").map((s) => s.trim());
+    const parsed = raw.map((s) => parseInt(s, 10));
+    const invalid = raw.filter((s, i) => isNaN(parsed[i]) || parsed[i] < 1);
+    if (invalid.length > 0) {
+      printWarning(`Invalid --pick value: ${invalid.join(", ")}. Expected positive integers (1-based).`);
+      return [];
+    }
+    const outOfRange = parsed.filter((n) => n > filtered.length);
+    if (outOfRange.length > 0) {
+      printWarning(`--pick index ${outOfRange.join(", ")} out of range (max: ${filtered.length}). Run "ai-memory list" to see available conversations.`);
+    }
+    const indices = new Set(parsed.map((n) => n - 1));
     filtered = filtered.filter((_, i) => indices.has(i));
   }
 
@@ -248,7 +298,11 @@ async function filterConversations(
   // --since
   if (opts.since) {
     const sinceTs = parseSince(opts.since);
-    if (sinceTs) filtered = filtered.filter((c) => c.modifiedAt >= sinceTs);
+    if (sinceTs === null) {
+      printWarning(`Cannot parse --since "${opts.since}". Expected: "3 days ago", "2 weeks ago", or ISO date.`);
+      return [];
+    }
+    filtered = filtered.filter((c) => c.modifiedAt >= sinceTs);
   }
 
   // --incremental
@@ -258,7 +312,7 @@ async function filterConversations(
         const prev = getConversationState(state, c.id);
         if (!prev) return true;
         if (c.modifiedAt > prev.processedAt) return true;
-        const fileExists = await hasMemoryFile(c, outputDir);
+        const fileExists = await hasMemoryFile(c, outputDir, author ?? undefined);
         return !fileExists;
       })
     );

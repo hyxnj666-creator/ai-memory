@@ -6,11 +6,12 @@ export default defineConfig([
   {
     entry: { index: "src/index.ts" },
     format: ["esm"],
-    target: "node22",
+    target: "node18",
     outDir: "dist",
     clean: true,
     sourcemap: true,
     define: { __VERSION__: JSON.stringify(version) },
+    external: ["node:sqlite"],
     banner: {
       js: "#!/usr/bin/env node",
     },
@@ -18,7 +19,7 @@ export default defineConfig([
   {
     entry: { public: "src/public.ts" },
     format: ["esm"],
-    target: "node22",
+    target: "node18",
     outDir: "dist",
     sourcemap: true,
     dts: true,

@@ -351,7 +351,9 @@ export class CursorSource implements Source {
         try { await copyFile(dbPath + ext, tmpDb + ext); } catch { /* optional */ }
       }
 
-      const { DatabaseSync } = await import("node:sqlite" as string);
+      // Dynamic specifier prevents esbuild from stripping the "node:" prefix
+      const sqliteMod = "node" + ":sqlite";
+      const { DatabaseSync } = await import(sqliteMod);
       const db = new (DatabaseSync as new (p: string, opts?: Record<string, unknown>) => {
         prepare(sql: string): { get(...args: unknown[]): unknown };
         close(): void;
@@ -375,7 +377,9 @@ export class CursorSource implements Source {
         }
       }
       return map;
-    } catch {
+    } catch (err) {
+      // Non-fatal — fall back to first-message title extraction
+      process.stderr.write(`[ai-memory] title map load failed: ${err}\n`);
       return new Map();
     }
   }

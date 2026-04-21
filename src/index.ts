@@ -4,6 +4,9 @@ import { runList } from "./commands/list.js";
 import { runSummary } from "./commands/summary.js";
 import { runContext } from "./commands/context.js";
 import { runInit } from "./commands/init.js";
+import { runSearch } from "./commands/search.js";
+import { runRules } from "./commands/rules.js";
+import { runResolve } from "./commands/resolve.js";
 import { printError } from "./output/terminal.js";
 
 function run(p: Promise<number>): void {
@@ -36,6 +39,15 @@ switch (opts.command) {
     break;
   case "init":
     run(runInit(opts));
+    break;
+  case "search":
+    run(runSearch(opts));
+    break;
+  case "rules":
+    run(runRules(opts));
+    break;
+  case "resolve":
+    run(runResolve(opts));
     break;
   default:
     printError(`Unknown command. Run "ai-memory --help" for usage.`);

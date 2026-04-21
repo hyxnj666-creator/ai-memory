@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { access, mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ConversationMeta, ExtractedMemory, MemoryType } from "../types.js";
 
@@ -20,6 +20,8 @@ const TYPE_DIR: Record<MemoryType, string> = {
   issue: "issues",
 };
 
+const TYPE_DIRS_SET = new Set(Object.values(TYPE_DIR));
+
 // --- i18n labels ---
 
 type Language = "zh" | "en";
@@ -27,6 +29,8 @@ type Language = "zh" | "en";
 const LABELS: Record<Language, Record<string, string>> = {
   zh: {
     date: "日期",
+    author: "作者",
+    status: "状态",
     source: "来源",
     conversation: "对话",
     context: "上下文",
@@ -37,6 +41,8 @@ const LABELS: Record<Language, Record<string, string>> = {
   },
   en: {
     date: "Date",
+    author: "Author",
+    status: "Status",
     source: "Source",
     conversation: "Conversation",
     context: "Context",
@@ -72,12 +78,19 @@ function renderMemoryFile(m: ExtractedMemory, lang: Language = "zh"): string {
     `# ${m.title}`,
     "",
     `> **${L.date}**: ${m.date}  `,
+  ];
+
+  if (m.author) {
+    lines.push(`> **${L.author}**: ${m.author}  `);
+  }
+
+  lines.push(
     `> **${L.source}**: ${m.sourceType}:${m.sourceId.slice(0, 8)}  `,
     `> **${L.conversation}**: ${m.sourceTitle}`,
     "",
     "---",
     "",
-  ];
+  );
 
   if (m.context) lines.push(`**${L.context}**: ${m.context}`, "");
   lines.push(`**${L.content}**: ${m.content}`);
@@ -92,96 +105,129 @@ function renderMemoryFile(m: ExtractedMemory, lang: Language = "zh"): string {
 // --- Index file format ---
 
 interface IndexEntry {
-  /** Relative paths under outputDir of the files written for this conversation */
   files: string[];
+}
+
+// --- Author-aware base dir ---
+
+function authorBase(outputDir: string, author?: string): string {
+  return author ? join(outputDir, author) : outputDir;
+}
+
+function indexBase(outputDir: string, author?: string): string {
+  return author
+    ? join(outputDir, ".index", author)
+    : join(outputDir, ".index");
 }
 
 // --- Per-type directory writer ---
 
-/**
- * Write each memory to its own file under `.ai-memory/{type}/`.
- * Writes a rich `.index/{sourceId}.json` manifest so hasMemoryFile()
- * can verify the actual files still exist (not just the marker).
- */
+export interface WriteOptions {
+  force?: boolean;
+  author?: string;
+}
+
+export interface WriteResult {
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
 export async function writeConversationMemories(
   memories: ExtractedMemory[],
   outputDir: string,
-  lang: Language = "zh"
-): Promise<void> {
-  if (memories.length === 0) return;
+  lang: Language = "zh",
+  options: WriteOptions = {}
+): Promise<WriteResult> {
+  const result: WriteResult = { created: 0, updated: 0, skipped: 0 };
+  if (memories.length === 0) return result;
+
+  const base = authorBase(outputDir, options.author);
+  const idxBase = indexBase(outputDir, options.author);
 
   await Promise.all([
-    ...TYPES.map((t) => mkdir(join(outputDir, TYPE_DIR[t]), { recursive: true })),
-    mkdir(join(outputDir, ".index"), { recursive: true }),
+    ...TYPES.map((t) => mkdir(join(base, TYPE_DIR[t]), { recursive: true })),
+    mkdir(idxBase, { recursive: true }),
   ]);
 
-  // Track which files were written per sourceId
   const writtenFiles = new Map<string, string[]>();
 
   await Promise.all(
     memories.map(async (m) => {
       const typeDir = TYPE_DIR[m.type as MemoryType];
-      if (!typeDir) return; // skip invalid types from model
+      if (!typeDir) return;
 
-      const dir = join(outputDir, typeDir);
+      const dir = join(base, typeDir);
       const filename = memoryFilename(m.date, m.title);
       const filePath = join(dir, filename);
-      const relPath = `${typeDir}/${filename}`;
+      const relPath = options.author
+        ? `${options.author}/${typeDir}/${filename}`
+        : `${typeDir}/${filename}`;
+      const newContent = renderMemoryFile(m, lang);
 
-      // Skip if already exists (idempotent reruns)
-      const exists = await safeRead(filePath);
-      if (!exists) {
-        await writeFile(filePath, renderMemoryFile(m, lang), "utf-8");
+      const existing = await safeRead(filePath);
+      if (existing === null) {
+        await writeFile(filePath, newContent, "utf-8");
+        result.created++;
+      } else if (options.force && existing !== newContent) {
+        await writeFile(filePath, newContent, "utf-8");
+        result.updated++;
+      } else {
+        result.skipped++;
       }
 
-      // Track regardless (even pre-existing counts as "present")
       const list = writtenFiles.get(m.sourceId) ?? [];
       list.push(relPath);
       writtenFiles.set(m.sourceId, list);
     })
   );
 
-  // Write rich index manifest per sourceId
   await Promise.all(
     [...writtenFiles.entries()].map(([id, files]) => {
       const entry: IndexEntry = { files: [...new Set(files)] };
       return writeFile(
-        join(outputDir, ".index", `${id}.json`),
+        join(idxBase, `${id}.json`),
         JSON.stringify(entry),
         "utf-8"
       );
     })
   );
+
+  return result;
 }
 
 export const writeMemories = writeConversationMemories;
 
 /**
  * Check whether memories for a conversation still exist on disk.
- * Reads the index manifest and verifies at least one listed file is present.
- * Falls back to checking old-style empty marker for backwards compatibility.
+ * Searches both author-namespaced and legacy flat index paths.
  */
 export async function hasMemoryFile(
   meta: ConversationMeta,
-  outputDir: string
+  outputDir: string,
+  author?: string
 ): Promise<boolean> {
-  // Try new JSON manifest
-  const manifestPath = join(outputDir, ".index", `${meta.id}.json`);
-  try {
-    const raw = await readFile(manifestPath, "utf-8");
-    const entry = JSON.parse(raw) as IndexEntry;
-    if (!entry.files?.length) return false;
-    // Verify at least one listed file still exists
-    for (const rel of entry.files) {
-      try {
-        await access(join(outputDir, rel));
-        return true;
-      } catch { /* continue */ }
-    }
-    return false; // all listed files are gone
-  } catch { /* fall through */ }
+  const searchPaths = author
+    ? [join(outputDir, ".index", author, `${meta.id}.json`)]
+    : [];
+  // Always also check legacy flat path
+  searchPaths.push(join(outputDir, ".index", `${meta.id}.json`));
 
-  // Backwards-compat: old empty marker file (no .json extension)
+  for (const manifestPath of searchPaths) {
+    try {
+      const raw = await readFile(manifestPath, "utf-8");
+      const entry = JSON.parse(raw) as IndexEntry;
+      if (!entry.files?.length) continue;
+      for (const rel of entry.files) {
+        try {
+          await access(join(outputDir, rel));
+          return true;
+        } catch { /* continue */ }
+      }
+    } catch { /* try next */ }
+  }
+
+  // Backwards-compat: old empty marker file
   try {
     await access(join(outputDir, ".index", meta.id));
     return true;
@@ -193,35 +239,85 @@ export async function hasMemoryFile(
 // --- Read all memories ---
 
 /**
- * Read all memories from the per-type directories.
- * Supports both zh and en label variants (auto-detected per file).
+ * Read all memories. If `author` is specified, only reads that author's
+ * subdirectory. Otherwise reads ALL author subdirectories plus any
+ * legacy flat type directories (backwards compat).
  */
 export async function readAllMemories(
-  outputDir: string
+  outputDir: string,
+  author?: string
 ): Promise<ExtractedMemory[]> {
   const memories: ExtractedMemory[] = [];
 
-  await Promise.all(
-    TYPES.map(async (type) => {
-      const dir = join(outputDir, TYPE_DIR[type]);
-      let files: string[];
-      try {
-        files = (await readdir(dir)).filter((f) => f.endsWith(".md"));
-      } catch {
-        return;
-      }
+  if (author) {
+    await readMemoriesFromBase(join(outputDir, author), author, memories);
+    return memories;
+  }
 
-      for (const file of files) {
-        const content = await readFile(join(dir, file), "utf-8").catch(() => "");
-        if (!content) continue;
+  // Scan outputDir for author subdirectories + legacy flat structure
+  let entries: string[];
+  try {
+    entries = await readdir(outputDir);
+  } catch {
+    return memories;
+  }
 
-        const m = parseMemoryFile(content, type, file);
-        if (m) memories.push(m);
-      }
-    })
-  );
+  for (const entry of entries) {
+    if (entry.startsWith(".")) continue;
+    const entryPath = join(outputDir, entry);
+    const s = await stat(entryPath).catch(() => null);
+    if (!s?.isDirectory()) continue;
+
+    if (TYPE_DIRS_SET.has(entry)) {
+      // Legacy flat structure: decisions/, todos/, etc. at top level
+      await readMemoriesFromTypeDir(outputDir, entry, "", memories);
+    } else {
+      // Author subdirectory
+      await readMemoriesFromBase(entryPath, entry, memories);
+    }
+  }
 
   return memories;
+}
+
+async function readMemoriesFromBase(
+  base: string,
+  authorName: string,
+  memories: ExtractedMemory[]
+): Promise<void> {
+  await Promise.all(
+    TYPES.map((type) => readMemoriesFromTypeDir(base, TYPE_DIR[type], authorName, memories))
+  );
+}
+
+async function readMemoriesFromTypeDir(
+  base: string,
+  typeDirName: string,
+  authorName: string,
+  memories: ExtractedMemory[]
+): Promise<void> {
+  const type = Object.entries(TYPE_DIR).find(([, v]) => v === typeDirName)?.[0] as MemoryType | undefined;
+  if (!type) return;
+
+  const dir = join(base, typeDirName);
+  let files: string[];
+  try {
+    files = (await readdir(dir)).filter((f) => f.endsWith(".md"));
+  } catch {
+    return;
+  }
+
+  for (const file of files) {
+    const fullPath = join(dir, file);
+    const content = await readFile(fullPath, "utf-8").catch(() => "");
+    if (!content) continue;
+    const m = parseMemoryFile(content, type, file);
+    if (m) {
+      m.filePath = fullPath;
+      if (!m.author && authorName) m.author = authorName;
+      memories.push(m);
+    }
+  }
 }
 
 // --- Parser that handles both zh and en labels ---
@@ -233,9 +329,10 @@ function parseMemoryFile(
 ): ExtractedMemory | null {
   const titleMatch = content.match(/^# (.+)$/m);
 
-  // Build a combined label pattern covering both zh and en
   const allLabels = Object.values(LABELS).flatMap((l) => Object.values(l));
   const dateRe = buildLabelRe(LABELS.zh.date, LABELS.en.date);
+  const authorRe = buildLabelRe(LABELS.zh.author, LABELS.en.author);
+  const statusRe = buildLabelRe(LABELS.zh.status, LABELS.en.status);
   const sourceRe = buildLabelRe(LABELS.zh.source, LABELS.en.source);
   const convRe = buildLabelRe(LABELS.zh.conversation, LABELS.en.conversation);
   const contextRe = buildLabelRe(LABELS.zh.context, LABELS.en.context);
@@ -244,11 +341,9 @@ function parseMemoryFile(
   const altRe = buildLabelRe(LABELS.zh.alternatives, LABELS.en.alternatives);
   const impactRe = buildLabelRe(LABELS.zh.impact, LABELS.en.impact);
 
-  // Build the "next bold field" boundary list for greedy match cutoff
   const anyField = allLabels.map(escapeRe).join("|");
 
   function extract(labelRe: RegExp): string {
-    // Match the field value, stopping before the next **Field**: or end of string
     const m = content.match(
       new RegExp(
         `\\*\\*(?:${labelRe.source})\\*\\*:\\s*([\\s\\S]+?)(?=\\n\\n\\*\\*(?:${anyField})\\*\\*:|\\s*$)`
@@ -258,6 +353,8 @@ function parseMemoryFile(
   }
 
   const dateMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${dateRe.source})\\*\\*:\\s*(\\d{4}-\\d{2}-\\d{2})`));
+  const authorMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${authorRe.source})\\*\\*:\\s*(.+?)\\s*$`, "m"));
+  const statusMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${statusRe.source})\\*\\*:\\s*(\\w+)`, "m"));
   const sourceMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${sourceRe.source})\\*\\*:\\s*(\\w[\\w-]*):(\\w+)`));
   const convMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${convRe.source})\\*\\*:\\s*(.+)$`, "m"));
 
@@ -273,6 +370,8 @@ function parseMemoryFile(
     sourceType: (sourceMatch?.[1] ?? "cursor") as ExtractedMemory["sourceType"],
     sourceId: sourceMatch?.[2] ?? "",
     sourceTitle: convMatch?.[1]?.trim() ?? "",
+    author: authorMatch?.[1]?.trim() || undefined,
+    status: statusMatch?.[1] === "resolved" ? "resolved" : "active",
   };
 }
 

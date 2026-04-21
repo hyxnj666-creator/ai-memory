@@ -46,12 +46,18 @@ export interface ExtractedMemory {
   sourceId: string;
   sourceTitle: string;
   sourceType: SourceType;
+  /** Author who extracted this memory (team mode) */
+  author?: string;
+  /** Memory status: active (default) or resolved */
+  status?: "active" | "resolved";
+  /** File path on disk (populated when reading) */
+  filePath?: string;
 }
 
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -70,6 +76,20 @@ export interface CliOptions {
   pickId?: string;
   /** Use LLM to generate a summarized context (context command) */
   summarize?: boolean;
+  /** Overwrite existing memory files even if they already exist */
+  force?: boolean;
+  /** Undo a resolve (reactivate memories) */
+  undo?: boolean;
+  /** Override auto-detected author name */
+  author?: string;
+  /** Include all authors' memories (summary/context) */
+  allAuthors?: boolean;
+  /** Search query string */
+  query?: string;
+  /** Include resolved/completed memories */
+  includeResolved?: boolean;
+  /** Positional args (e.g. file paths for resolve) */
+  positionalArgs?: string[];
 }
 
 // --- Config Types ---
@@ -90,6 +110,8 @@ export interface AiMemoryConfig {
     language: "zh" | "en";
   };
   model: string;
+  /** Author name for team mode (auto-detected from git if not set) */
+  author?: string;
 }
 
 export const DEFAULT_CONFIG: AiMemoryConfig = {

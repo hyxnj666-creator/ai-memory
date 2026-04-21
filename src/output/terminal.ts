@@ -1,20 +1,29 @@
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const GREEN = "\x1b[32m";
-const YELLOW = "\x1b[33m";
-const BLUE = "\x1b[34m";
-const CYAN = "\x1b[36m";
-const RED = "\x1b[31m";
+const colorEnabled =
+  !process.env.NO_COLOR &&
+  process.stdout.isTTY !== false;
+
+const esc = (code: string) => (colorEnabled ? code : "");
+
+export const ANSI = {
+  reset: esc("\x1b[0m"),
+  bold: esc("\x1b[1m"),
+  dim: esc("\x1b[2m"),
+  green: esc("\x1b[32m"),
+  yellow: esc("\x1b[33m"),
+  blue: esc("\x1b[34m"),
+  cyan: esc("\x1b[36m"),
+  red: esc("\x1b[31m"),
+  magenta: esc("\x1b[35m"),
+} as const;
 
 export const c = {
-  bold: (s: string) => `${BOLD}${s}${RESET}`,
-  dim: (s: string) => `${DIM}${s}${RESET}`,
-  green: (s: string) => `${GREEN}${s}${RESET}`,
-  yellow: (s: string) => `${YELLOW}${s}${RESET}`,
-  blue: (s: string) => `${BLUE}${s}${RESET}`,
-  cyan: (s: string) => `${CYAN}${s}${RESET}`,
-  red: (s: string) => `${RED}${s}${RESET}`,
+  bold: (s: string) => `${ANSI.bold}${s}${ANSI.reset}`,
+  dim: (s: string) => `${ANSI.dim}${s}${ANSI.reset}`,
+  green: (s: string) => `${ANSI.green}${s}${ANSI.reset}`,
+  yellow: (s: string) => `${ANSI.yellow}${s}${ANSI.reset}`,
+  blue: (s: string) => `${ANSI.blue}${s}${ANSI.reset}`,
+  cyan: (s: string) => `${ANSI.cyan}${s}${ANSI.reset}`,
+  red: (s: string) => `${ANSI.red}${s}${ANSI.reset}`,
 };
 
 export function printBanner(): void {
@@ -93,8 +102,17 @@ export function printWarning(msg: string): void {
 }
 
 export function printNoConversations(): void {
-  console.log(`\n[~] No new conversations to process.`);
+  console.log(`\n[~] No conversations matched your filters.`);
   console.log(
-    `   ${c.dim("Use --since or remove --incremental to reprocess.")}`
+    `   ${c.dim("Try adjusting --pick, --since, or remove --incremental to reprocess.")}`
+  );
+}
+
+export function printNoMemoriesExtracted(processed: number): void {
+  console.log(
+    `\n[~] Processed ${c.bold(String(processed))} conversation${processed === 1 ? "" : "s"} but no extractable knowledge found.`
+  );
+  console.log(
+    `   ${c.dim("Conversations may be too short or contain only routine code generation.")}`
   );
 }

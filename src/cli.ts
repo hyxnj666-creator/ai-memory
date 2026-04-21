@@ -19,6 +19,9 @@ Usage:
 Commands:
   list        List all available conversations
   extract     Extract memories from conversation history
+  search      Search through extracted memories
+  rules       Export conventions as Cursor Rules (.mdc)
+  resolve     Mark memories as resolved/completed
   summary     Generate a project-level summary
   context     Generate a continuation prompt for new sessions
   init        Initialize config and detect editors
@@ -34,10 +37,22 @@ Extract options:
   --incremental         Only process new conversations since last run
   --type <types>        Comma-separated memory types to extract
   --dry-run             Preview extraction without writing files
+  --force               Overwrite existing memory files if content changed
 
 Summary options:
   --output <file>       Output file path (default: SUMMARY.md)
   --focus <topic>       Focus on a specific topic
+
+Search options:
+  search <query>        Search memories by keyword
+  --type <types>        Filter by memory type
+
+Rules options:
+  --output <path>       Output path (default: .cursor/rules/ai-memory-conventions.mdc)
+
+Resolve options:
+  resolve <pattern>     Mark matching memories as resolved (by title keyword or filename)
+  resolve --undo <pat>  Mark matching memories back to active
 
 Context options:
   --topic <topic>       Focus context on a specific topic
@@ -45,6 +60,11 @@ Context options:
   --copy                Copy result to clipboard
   --output <file>       Write context to file instead of stdout
   --summarize           Use LLM to generate a condensed prose summary (slower, costs tokens)
+  --include-resolved    Include resolved memories
+
+Team options:
+  --author <name>       Override auto-detected author name
+  --all-authors         Include all authors' memories (summary/context)
 
 Global options:
   --json                Output as JSON
@@ -63,13 +83,39 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve"].includes(command)) {
     return { command: "help" };
   }
 
   const opts: CliOptions = {
     command: command as CliOptions["command"],
   };
+
+  // Collect positional args (non-flag args after command, skipping flag values)
+  const FLAGS_WITH_VALUE = new Set([
+    "--source", "--since", "--type", "--topic", "--recent",
+    "--output", "--focus", "--pick", "--id", "--author",
+  ]);
+
+  if (command === "search" || command === "resolve") {
+    const positional: string[] = [];
+    for (let j = 1; j < argv.length; j++) {
+      if (argv[j].startsWith("--")) {
+        if (FLAGS_WITH_VALUE.has(argv[j])) j++; // skip the value
+        continue;
+      }
+      positional.push(argv[j]);
+    }
+    if (command === "search" && positional.length > 0) {
+      opts.query = positional.join(" ");
+    }
+    if (command === "resolve") {
+      opts.positionalArgs = positional;
+    }
+  }
+
+  const hasValue = (v: string | undefined): v is string =>
+    v !== undefined && !v.startsWith("--");
 
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
@@ -83,27 +129,25 @@ export function parseArgs(argv: string[]): CliOptions {
         }
         break;
       case "--since":
-        opts.since = next;
-        i++;
+        if (hasValue(next)) { opts.since = next; i++; }
         break;
       case "--incremental":
         opts.incremental = true;
         break;
       case "--type": {
-        const types = next?.split(",").filter((t): t is MemoryType =>
+        if (!hasValue(next)) break;
+        const types = next.split(",").filter((t): t is MemoryType =>
           VALID_TYPES.includes(t as MemoryType)
         );
-        if (types?.length) opts.types = types;
+        if (types.length) opts.types = types;
         i++;
         break;
       }
       case "--topic":
-        opts.topic = next;
-        i++;
+        if (hasValue(next)) { opts.topic = next; i++; }
         break;
       case "--recent":
-        opts.recent = parseInt(next, 10) || undefined;
-        i++;
+        if (hasValue(next)) { opts.recent = parseInt(next, 10) || undefined; i++; }
         break;
       case "--copy":
         opts.copy = true;
@@ -112,12 +156,10 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.summarize = true;
         break;
       case "--output":
-        opts.output = next;
-        i++;
+        if (hasValue(next)) { opts.output = next; i++; }
         break;
       case "--focus":
-        opts.focus = next;
-        i++;
+        if (hasValue(next)) { opts.focus = next; i++; }
         break;
       case "--json":
         opts.json = true;
@@ -129,12 +171,25 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.verbose = true;
         break;
       case "--pick":
-        opts.pick = next;
-        i++;
+        if (hasValue(next)) { opts.pick = next; i++; }
         break;
       case "--id":
-        opts.pickId = next;
-        i++;
+        if (hasValue(next)) { opts.pickId = next; i++; }
+        break;
+      case "--force":
+        opts.force = true;
+        break;
+      case "--author":
+        if (hasValue(next)) { opts.author = next; i++; }
+        break;
+      case "--all-authors":
+        opts.allAuthors = true;
+        break;
+      case "--include-resolved":
+        opts.includeResolved = true;
+        break;
+      case "--undo":
+        opts.undo = true;
         break;
     }
   }

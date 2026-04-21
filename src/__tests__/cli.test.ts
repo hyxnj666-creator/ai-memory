@@ -124,4 +124,78 @@ describe("parseArgs", () => {
       json: true,
     });
   });
+
+  // --- search command ---
+
+  it("parses search command with query", () => {
+    const opts = parseArgs(["search", "OAuth"]);
+    expect(opts.command).toBe("search");
+    expect(opts.query).toBe("OAuth");
+  });
+
+  it("parses search with multi-word query", () => {
+    const opts = parseArgs(["search", "payment", "module"]);
+    expect(opts.query).toBe("payment module");
+  });
+
+  it("parses search with --type filter", () => {
+    const opts = parseArgs(["search", "auth", "--type", "decision"]);
+    expect(opts.command).toBe("search");
+    expect(opts.query).toBe("auth");
+    expect(opts.types).toEqual(["decision"]);
+  });
+
+  it("parses search with --include-resolved", () => {
+    const opts = parseArgs(["search", "API", "--include-resolved"]);
+    expect(opts.includeResolved).toBe(true);
+  });
+
+  it("parses search with --json", () => {
+    const opts = parseArgs(["search", "config", "--json"]);
+    expect(opts.json).toBe(true);
+    expect(opts.query).toBe("config");
+  });
+
+  // --- rules command ---
+
+  it("parses rules command", () => {
+    expect(parseArgs(["rules"])).toMatchObject({ command: "rules" });
+  });
+
+  it("parses rules with --output", () => {
+    const opts = parseArgs(["rules", "--output", "my-rules.mdc"]);
+    expect(opts.command).toBe("rules");
+    expect(opts.output).toBe("my-rules.mdc");
+  });
+
+  it("parses rules with --all-authors", () => {
+    const opts = parseArgs(["rules", "--all-authors"]);
+    expect(opts.allAuthors).toBe(true);
+  });
+
+  // --- resolve command ---
+
+  it("parses resolve command with pattern", () => {
+    const opts = parseArgs(["resolve", "OAuth"]);
+    expect(opts.command).toBe("resolve");
+    expect(opts.positionalArgs).toEqual(["OAuth"]);
+  });
+
+  it("parses resolve with multi-word pattern", () => {
+    const opts = parseArgs(["resolve", "payment", "module"]);
+    expect(opts.positionalArgs).toEqual(["payment", "module"]);
+  });
+
+  it("parses resolve with --undo", () => {
+    const opts = parseArgs(["resolve", "OAuth", "--undo"]);
+    expect(opts.command).toBe("resolve");
+    expect(opts.positionalArgs).toEqual(["OAuth"]);
+    expect(opts.undo).toBe(true);
+  });
+
+  it("parses resolve with --author", () => {
+    const opts = parseArgs(["resolve", "auth", "--author", "alice"]);
+    expect(opts.positionalArgs).toEqual(["auth"]);
+    expect(opts.author).toBe("alice");
+  });
 });

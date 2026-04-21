@@ -1,100 +1,133 @@
 # ai-memory
 
-Extract structured knowledge from AI editor conversations (Cursor, Claude Code) and save it as git-trackable Markdown files.
+[![npm version](https://img.shields.io/npm/v/ai-memory-cli.svg)](https://www.npmjs.com/package/ai-memory-cli)
+[![CI](https://github.com/conorliu/ai-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/conorliu/ai-memory/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Stop losing technical decisions, architecture notes, and TODOs buried in chat history.
+> Turn AI chat history into a searchable, git-trackable knowledge base.
 
 ```bash
-npx ai-memory-cli extract --incremental
+npx ai-memory-cli extract          # auto-discover conversations, extract knowledge
+npx ai-memory-cli search "OAuth"   # find any memory instantly
+npx ai-memory-cli rules            # generate Cursor Rules from your conventions
+npx ai-memory-cli context --copy   # resume any session with full context
 ```
+
+Extract structured knowledge from AI editor conversations (Cursor, Claude Code) and save it as git-trackable Markdown files. Stop losing decisions, architecture notes, and conventions buried in chat history.
 
 > **[中文文档](README.zh-CN.md)**
 
 ---
 
-## The Problem
+## Why ai-memory?
 
-Every day you make dozens of decisions in Cursor or Claude Code: "we'll use the OAuth Bridge pattern", "async jobs go through the SSE bridge", "never call `getServerSideProps` in this project". These decisions live in chat history and are completely lost when:
+Every day you make dozens of decisions in Cursor or Claude Code. These decisions live in chat history and are lost when you switch machines, start a new conversation, or a teammate joins. **ai-memory turns ephemeral conversations into a persistent, searchable knowledge base.**
 
-- You switch to another machine
-- You start a new conversation
-- A teammate joins the project
-
-`ai-memory` reads your local conversation history, uses AI to extract what matters, and saves it as structured Markdown files you can commit to git.
-
-```
-Your chat history      ai-memory              Your git repo
-(local, unstructured)  (extract + classify)   (structured, searchable)
-
-Cursor transcripts  →  AI extracts          →  .ai-memory/
-Claude Code sessions    decisions/todos/        ├── decisions/
-                        architecture/           ├── architecture/
-                        issues/conventions      ├── todos/
-                                                └── ...
-```
+| What you get | How |
+|---|---|
+| **Structured knowledge** | AI extracts decisions, architecture, conventions, TODOs, issues |
+| **Git-trackable** | Plain Markdown files you commit alongside your code |
+| **Token savings** | `context` command compresses thousands of conversation turns into a focused prompt — typically 90%+ token reduction vs. re-reading history |
+| **Team-aware** | Per-author subdirectories, no merge conflicts |
+| **Cursor Rules export** | Auto-generate `.cursor/rules/` from extracted conventions — no other tool does this |
+| **Zero config** | Works out of the box with `npx` |
 
 ---
 
 ## Quick Start
 
-Set an API key (uses the same env vars as `ai-review-pipeline`):
-
 ```bash
-export AI_REVIEW_API_KEY=sk-...          # or OPENAI_API_KEY / ANTHROPIC_API_KEY
-export AI_REVIEW_BASE_URL=https://...    # optional, for custom endpoints
-```
+# Set up API key (any OpenAI-compatible provider)
+export AI_REVIEW_API_KEY=sk-...    # or OPENAI_API_KEY
 
-Run against your current project:
+# Extract knowledge from all conversations
+npx ai-memory-cli extract
 
-```bash
-npx ai-memory extract
-```
+# Search your knowledge base
+npx ai-memory-cli search "authentication"
 
-On first run, this auto-detects your Cursor/Claude Code history, processes all conversations, and writes `.ai-memory/` into your current directory. Commit it:
+# Generate Cursor Rules from conventions
+npx ai-memory-cli rules
 
-```bash
-git add .ai-memory/
-git commit -m "chore: add initial ai-memory knowledge base"
+# Generate a context prompt and copy to clipboard
+npx ai-memory-cli context --copy
+
+# Commit to git
+git add .ai-memory/ && git commit -m "chore: add ai-memory knowledge base"
 ```
 
 ---
 
 ## Commands
 
-### `list` — Browse available conversations
+### `list` — Show available conversations
 
 ```bash
-npx ai-memory list                             # list all conversations with status
-npx ai-memory list --source cursor             # filter by source
-npx ai-memory list --json                      # JSON output
+npx ai-memory-cli list                            # show all conversations
+npx ai-memory-cli list --source cursor             # only Cursor conversations
+npx ai-memory-cli list --json                      # JSON output
 ```
 
-Output shows index, date, turn count, extraction status (`[+]` extracted, `[ ]` pending), and real title from Cursor's DB.
-
-### `extract` — Extract memories from conversation history
+### `extract` — Extract memories from conversations
 
 ```bash
-npx ai-memory extract                          # auto-detect all sources
-npx ai-memory extract --incremental            # only new/modified conversations
-npx ai-memory extract --pick 4                 # process specific conversation by list index
-npx ai-memory extract --pick 1,4,7             # process multiple by index
-npx ai-memory extract --id b5677be8            # process by conversation ID prefix
-npx ai-memory extract --since "3 days ago"     # conversations modified in last 3 days
-npx ai-memory extract --since "2 weeks ago"    # also supports weeks
-npx ai-memory extract --source cursor          # specify source
-npx ai-memory extract --type decision,todo     # only extract specific types
-npx ai-memory extract --dry-run                # preview conversations to process (no LLM, no writes)
-npx ai-memory extract --verbose                # show LLM request details
-npx ai-memory extract --json                   # JSON output for CI
+npx ai-memory-cli extract                          # extract all conversations
+npx ai-memory-cli extract --incremental             # only new conversations
+npx ai-memory-cli extract --pick 3                  # only conversation #3
+npx ai-memory-cli extract --pick 1,4,7              # multiple conversations
+npx ai-memory-cli extract --id b5677be8             # match by ID prefix
+npx ai-memory-cli extract --since "3 days ago"      # only recent conversations
+npx ai-memory-cli extract --type decision,todo      # only specific types
+npx ai-memory-cli extract --dry-run                 # preview without writing
+npx ai-memory-cli extract --force                   # overwrite existing files
+npx ai-memory-cli extract --author "alice"          # override author name
+npx ai-memory-cli extract --verbose                 # show LLM request details
+npx ai-memory-cli extract --json                    # JSON output (CI friendly)
 ```
+
+### `search` — Search through extracted memories
+
+```bash
+npx ai-memory-cli search "OAuth"                   # keyword search across all memories
+npx ai-memory-cli search "payment" --type decision  # filter by type
+npx ai-memory-cli search "auth" --author alice      # filter by author
+npx ai-memory-cli search "API" --include-resolved   # include resolved memories
+npx ai-memory-cli search "config" --json            # JSON output
+```
+
+Results are ranked by relevance (title matches > content > context) with highlighted keywords.
+
+### `rules` — Export conventions as Cursor Rules
+
+Generate a `.mdc` file that Cursor automatically applies to all AI responses:
+
+```bash
+npx ai-memory-cli rules                            # generate .cursor/rules/ai-memory-conventions.mdc
+npx ai-memory-cli rules --output my-rules.mdc      # custom output path
+npx ai-memory-cli rules --all-authors              # include team conventions
+```
+
+This is the **conversation-to-rules pipeline** — extract conventions from chat history, auto-generate editor rules. No other tool does this.
+
+### `resolve` — Mark memories as resolved
+
+Decisions get overturned. TODOs get completed. Keep your knowledge base fresh:
+
+```bash
+npx ai-memory-cli resolve "OAuth"                  # mark matching memories as resolved
+npx ai-memory-cli resolve "OAuth" --undo           # reactivate resolved memories
+```
+
+Resolved memories are automatically excluded from `context`, `summary`, and `search` results. Use `--include-resolved` to force inclusion.
 
 ### `summary` — Generate a project-level summary
 
 ```bash
-npx ai-memory summary                          # write/update SUMMARY.md
-npx ai-memory summary --output MEMORY.md       # custom output path
-npx ai-memory summary --focus "payment module" # focus on a topic
-npx ai-memory summary --verbose                # show LLM debug info
+npx ai-memory-cli summary                          # write/update SUMMARY.md
+npx ai-memory-cli summary --output MEMORY.md       # custom output path
+npx ai-memory-cli summary --focus "payment module"  # focus on a topic
+npx ai-memory-cli summary --all-authors             # include all team members
+npx ai-memory-cli summary --include-resolved        # include resolved memories
 ```
 
 ### `context` — Generate a continuation prompt
@@ -102,60 +135,20 @@ npx ai-memory summary --verbose                # show LLM debug info
 For seamlessly resuming work in a new conversation or on another machine:
 
 ```bash
-npx ai-memory context                          # generate context block (instant, no LLM)
-npx ai-memory context --copy                   # generate and copy to clipboard
-npx ai-memory context --topic "coupon system"  # focus on a specific topic
-npx ai-memory context --recent 7               # only last 7 days of memories
-npx ai-memory context --output CONTEXT.md      # write to file
-npx ai-memory context --summarize              # use LLM to write a condensed prose summary
+npx ai-memory-cli context                          # generate context block (instant, no LLM)
+npx ai-memory-cli context --copy                   # generate and copy to clipboard
+npx ai-memory-cli context --topic "coupon system"  # focus on a specific topic
+npx ai-memory-cli context --recent 7               # only last 7 days of memories
+npx ai-memory-cli context --output CONTEXT.md      # write to file
+npx ai-memory-cli context --summarize              # use LLM for condensed prose summary
+npx ai-memory-cli context --all-authors            # include all team members
+npx ai-memory-cli context --include-resolved       # include resolved memories
 ```
 
-The default (no `--summarize`) assembles a structured block directly from your memories — instant, free, and lossless. Paste the output at the start of your next Cursor/Claude Code conversation.
-
-### `init` — Initialize config
+### `init` — Initialize configuration
 
 ```bash
-npx ai-memory init
-```
-
-Auto-detects which editors you use, creates `.ai-memory/.config.json`, and adds `.ai-memory/.state.json` to your `.gitignore`.
-
----
-
-## What Gets Extracted
-
-| Type | What it captures |
-|------|-----------------|
-| **decision** | Technical choices: what was chosen, why, what was rejected |
-| **architecture** | System design, module boundaries, data flow |
-| **convention** | Coding standards, naming rules, workflow conventions |
-| **todo** | Explicitly mentioned follow-up tasks |
-| **issue** | Bugs encountered and how they were resolved |
-
-Only concrete, actionable information is extracted. Routine code generation and small talk are ignored.
-
-### Example output
-
-Each memory is saved as its own Markdown file (e.g. `.ai-memory/decisions/2026-03-25-oauth-bridge-webview.md`):
-
-```markdown
-# OAuth Bridge Pattern for WebView
-
-> **Date**: 2026-03-25
-> **Source**: cursor:fa49d306
-> **Conversation**: HF OAuth Integration
-
----
-
-**Context**: hf-app needs to complete Google/Facebook OAuth inside an embedded WebView
-
-**Content**: Use OAuth Bridge pattern — static/oauth-bridge.html receives the redirect callback and forwards it to the App via postMessage
-
-**Reasoning**: Embedded WebViews cannot receive OAuth redirects directly; bridge page acts as intermediary
-
-**Alternatives**: Deep Link (inconsistent behavior on Android/iOS), Custom URL Scheme (not supported by all browsers)
-
-**Impact**: hf-app login page, oauth-web, backend OAuth callback route
+npx ai-memory-cli init                             # detect editors, create config
 ```
 
 ---
@@ -175,41 +168,29 @@ Each memory is saved as its own Markdown file (e.g. `.ai-memory/decisions/2026-0
 ### First extraction
 
 ```bash
-# 1. See what conversations are available
-npx ai-memory list
-
-# 2. Extract everything (takes a few minutes on first run)
-npx ai-memory extract
-
-# 3. Commit the knowledge base
-git add .ai-memory/
+npx ai-memory-cli list                    # see what conversations are available
+npx ai-memory-cli extract                 # extract everything (few minutes on first run)
+npx ai-memory-cli rules                   # generate Cursor Rules
+git add .ai-memory/ .cursor/rules/
 git commit -m "chore: add ai-memory knowledge base"
 ```
 
 ### Daily use (incremental)
 
 ```bash
-# After a productive coding session
-npx ai-memory extract --incremental
-
-# Commit new memories
+npx ai-memory-cli extract --incremental   # after a productive coding session
+npx ai-memory-cli rules                   # refresh Cursor Rules
 git add .ai-memory/ && git commit -m "chore: update memories"
 ```
 
 ### Starting a new conversation
 
 ```bash
-# Generate a context block and copy to clipboard
-npx ai-memory context --copy
-
-# Focus on what you're about to work on
-npx ai-memory context --topic "payment module" --copy
-
-# Or write to a file and attach it
-npx ai-memory context --output CONTEXT.md
+npx ai-memory-cli context --copy          # copy context to clipboard
+# Paste into new Cursor/Claude Code session
 ```
 
-Paste the copied prompt at the start of your new Cursor/Claude Code session. The output looks like:
+The output looks like:
 
 ```markdown
 ## Project Context
@@ -224,20 +205,62 @@ Paste the copied prompt at the start of your new Cursor/Claude Code session. The
 - [ ] Add retry logic to payment webhook handler
 ```
 
-The AI will immediately understand your project's decisions, conventions, and current state — no need to re-explain.
-
-### Processing a specific conversation
+### Finding specific knowledge
 
 ```bash
-# First, find the index of the conversation you want
-npx ai-memory list
-
-# Then extract just that one
-npx ai-memory extract --pick 3
-
-# Or match by ID prefix (shown in list output)
-npx ai-memory extract --id b5677be8
+npx ai-memory-cli search "payment"        # find all payment-related memories
+npx ai-memory-cli search "auth" --type decision  # only decisions about auth
 ```
+
+---
+
+## Team Workflow
+
+When multiple people use ai-memory in the same git repo, each person's memories are automatically stored in their own subdirectory.
+
+### How it works
+
+Author identity is auto-detected (priority: `--author` CLI flag > `config.author` > `git config user.name` > OS username). No manual setup needed.
+
+```
+.ai-memory/
+├── conor/
+│   ├── decisions/
+│   │   └── 2026-04-15-oauth-bridge.md
+│   └── todos/
+│       └── 2026-04-15-add-retry.md
+├── alice/
+│   ├── decisions/
+│   │   └── 2026-04-16-payment-design.md
+│   └── architecture/
+│       └── 2026-04-16-module-split.md
+└── .config.json
+```
+
+### Usage
+
+```bash
+# Everyone extracts normally — writes to their own directory
+npx ai-memory-cli extract --incremental
+
+# Generate your own context (default: only your memories)
+npx ai-memory-cli context --copy
+
+# Include the whole team's memories
+npx ai-memory-cli summary --all-authors
+npx ai-memory-cli context --all-authors --copy
+
+# Override author name
+npx ai-memory-cli extract --author "alice"
+```
+
+### Upgrading existing projects
+
+Memories created before v1.3 are stored in flat directories (`.ai-memory/decisions/`). After upgrading:
+
+- Old files are still read normally (backwards compatible), with `author` empty
+- New extractions go to `.ai-memory/{author}/decisions/` etc.
+- No manual migration required
 
 ---
 
@@ -247,30 +270,25 @@ npx ai-memory extract --id b5677be8
 Work machine                                   Home machine
 ────────────                                   ────────────
 Cursor / Claude Code dev work
-        │
-npx ai-memory extract --incremental
-        │
-git add .ai-memory/
+        -> npx ai-memory-cli extract --incremental
+        -> git add .ai-memory/
 git commit && git push
                                                git pull
-                                                    │
-                                               npx ai-memory context --topic "today's work"
-                                                    │
-                                               Paste context → new conversation
-                                                    │
-                                               Seamlessly resume
+                                               -> npx ai-memory-cli context --topic "today's work"
+                                               -> Paste context into new conversation
+                                               -> Seamlessly resume
 ```
 
 ---
 
 ## Configuration
 
-`ai-memory` works with zero config. To customize, run `npx ai-memory init` or create `.ai-memory/.config.json` manually:
+`ai-memory` works with zero config. To customize, run `npx ai-memory-cli init` or create `.ai-memory/.config.json` manually:
 
 ```jsonc
 {
   "sources": {
-    "cursor": { "enabled": true },
+    "cursor": { "enabled": true, "projectName": "my-project" },
     "claudeCode": { "enabled": true }
   },
   "extract": {
@@ -283,7 +301,8 @@ git commit && git push
     "summaryFile": "SUMMARY.md",
     "language": "zh"             // "zh" or "en" — output language for summaries
   },
-  "model": ""                    // leave empty for auto-selection
+  "model": "",                   // leave empty for auto-selection
+  "author": ""                   // leave empty to auto-detect from git config user.name
 }
 ```
 
@@ -293,7 +312,10 @@ git commit && git push
 |----------|-------------|
 | `AI_REVIEW_API_KEY` | API key (preferred, shared with ai-review-pipeline) |
 | `OPENAI_API_KEY` | OpenAI API key |
-| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `OPENAI_BASE_URL` | Custom OpenAI-compatible API base URL |
+| `OPENAI_MODEL` | Model override for OpenAI |
+| `ANTHROPIC_API_KEY` | Anthropic API key (requires compatible proxy) |
+| `ANTHROPIC_BASE_URL` | Anthropic proxy base URL |
 | `AI_REVIEW_BASE_URL` | Custom API base URL |
 | `AI_REVIEW_MODEL` | Model to use (default: `gpt-4o-mini`) |
 
@@ -301,22 +323,23 @@ git commit && git push
 
 ## Output Structure
 
-Each memory is its own file in a type-specific directory:
+Each memory is its own file, organized by author and type:
 
 ```
 .ai-memory/
 ├── SUMMARY.md                              # Project summary (from `summary` command)
-├── decisions/
-│   ├── 2026-04-12-oauth-bridge-pattern.md
-│   └── 2026-04-13-async-job-queue-design.md
-├── architecture/
-│   └── 2026-04-10-payment-module-design.md
-├── conventions/
-│   └── 2026-04-08-coding-conventions.md
-├── todos/
-│   └── 2026-04-12-add-retry-logic.md
-├── issues/
-│   └── 2026-04-11-sqlite-locking-fix.md
+├── conor/                                  # Per-author subdirectory
+│   ├── decisions/
+│   │   ├── 2026-04-12-oauth-bridge-pattern.md
+│   │   └── 2026-04-13-async-job-queue-design.md
+│   ├── architecture/
+│   │   └── 2026-04-10-payment-module-design.md
+│   ├── conventions/
+│   │   └── 2026-04-08-coding-conventions.md
+│   ├── todos/
+│   │   └── 2026-04-12-add-retry-logic.md
+│   └── issues/
+│       └── 2026-04-11-sqlite-locking-fix.md
 ├── .index/                                 # Extraction index (auto-managed)
 ├── .config.json                            # Configuration (commit this)
 └── .state.json                             # Extraction state (add to .gitignore)
@@ -331,7 +354,7 @@ Add `.ai-memory/.state.json` to `.gitignore` — it tracks which conversations h
 ```yaml
 # .github/workflows/memory.yml
 - name: Extract AI memories
-  run: npx ai-memory extract --incremental --json
+  run: npx ai-memory-cli extract --incremental --json
   env:
     AI_REVIEW_API_KEY: ${{ secrets.AI_REVIEW_API_KEY }}
 ```
@@ -340,8 +363,10 @@ Add `.ai-memory/.state.json` to `.gitignore` — it tracks which conversations h
 
 ## Requirements
 
-- Node.js >= 22 (required for built-in `node:sqlite` support)
+- Node.js >= 18
 - An API key for any OpenAI-compatible provider
+
+> **Tip:** Node.js 22+ enables richer conversation titles by reading Cursor's database. On Node 18-20, titles are extracted from the first message (still works fine).
 
 ## License
 

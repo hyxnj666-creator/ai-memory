@@ -22,9 +22,11 @@ export function buildExtractionPrompt(
 RULES:
 - Extract ONLY concrete, specific, actionable information
 - Skip: small talk, failed debugging attempts, routine code generation, vague plans
-- Each "content" field MUST contain specific technical details — NOT just restate the title
+- Each "content" field MUST be at least 30 characters and contain specific technical details — NOT just restate the title
+- If the content would just repeat the title, DO NOT extract it
 - Each "context" field MUST explain the specific problem or goal that caused this
 - For decisions: "reasoning" MUST explain WHY this approach beats alternatives
+- Prefer fewer, high-quality extractions over many vague ones
 - Write in the same language as the conversation (Chinese if the conversation is in Chinese)
 - ${dateInstruction}
 ${typeFilter}
@@ -240,4 +242,28 @@ export function buildDirectContext(
   }
 
   return sections.join("\n\n");
+}
+
+/**
+ * Build a compressed index of memories — one line per memory.
+ * Used for older memories that don't fit in the full-detail budget.
+ */
+export function buildCondensedIndex(
+  memories: MemoryForContext[],
+  language: "zh" | "en"
+): string {
+  const isZh = language === "zh";
+  const header = isZh
+    ? "### 更多历史记忆（如需详情可追问）"
+    : "### Older Memories (ask for details if needed)";
+
+  const typeAbbr: Record<string, string> = {
+    decision: "D", architecture: "A", convention: "C", todo: "T", issue: "I",
+  };
+
+  const lines = memories
+    .sort((a, b) => (b.date > a.date ? 1 : -1))
+    .map((m) => `- [${typeAbbr[m.type] ?? "?"}] ${m.title} _(${m.date})_`);
+
+  return [header, ...lines].join("\n");
 }

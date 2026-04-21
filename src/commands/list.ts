@@ -3,16 +3,8 @@ import { detectSources, createSource } from "../sources/detector.js";
 import { loadState } from "../store/state.js";
 import { hasMemoryFile } from "../store/memory-store.js";
 import { loadConfig } from "../config.js";
-import { printError } from "../output/terminal.js";
-
-const COL = {
-  reset: "\x1b[0m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
-  bold: "\x1b[1m",
-};
+import { printError, ANSI as COL } from "../output/terminal.js";
+import { resolveAuthor } from "../utils/author.js";
 
 /** Truncate string to at most `maxCols` display columns (CJK chars = 2 cols). */
 function truncateToWidth(str: string, maxCols: number): string {
@@ -32,10 +24,11 @@ export async function runList(opts: CliOptions): Promise<number> {
   const config = await loadConfig();
   const outputDir = config.output.dir;
 
-  // Resolve sources
+  // Resolve sources (honor sources.*.enabled from config, consistent with extract)
   let conversations: ConversationMeta[] = [];
+  const projectName = config.sources?.cursor?.projectName;
   if (opts.source) {
-    const source = createSource(opts.source);
+    const source = createSource(opts.source, projectName);
     const ok = await source.detect();
     if (!ok) {
       printError(`Source "${opts.source}" not available on this machine.`);
@@ -43,8 +36,15 @@ export async function runList(opts: CliOptions): Promise<number> {
     }
     conversations = await source.listConversations();
   } else {
-    const { available } = await detectSources();
-    for (const s of available) {
+    const { available } = await detectSources(projectName);
+    const sourcesConfig = config.sources;
+    const filtered = available.filter((s) => {
+      if (!sourcesConfig) return true;
+      if (s.type === "cursor") return sourcesConfig.cursor.enabled !== false;
+      if (s.type === "claude-code") return sourcesConfig.claudeCode.enabled !== false;
+      return true;
+    });
+    for (const s of filtered) {
       conversations.push(...(await s.listConversations()));
     }
   }
@@ -57,11 +57,12 @@ export async function runList(opts: CliOptions): Promise<number> {
   // Sort newest first
   conversations.sort((a, b) => b.modifiedAt - a.modifiedAt);
 
-  const state = await loadState();
+  const state = await loadState(outputDir);
+  const author = await resolveAuthor(config, opts.author);
 
-  // Check memory file existence in parallel
+  // Check memory file existence in parallel (author-aware)
   const hasFile = await Promise.all(
-    conversations.map((c) => hasMemoryFile(c, outputDir))
+    conversations.map((c) => hasMemoryFile(c, outputDir, author))
   );
 
   if (opts.json) {

@@ -6,11 +6,16 @@ import { readAllMemories } from "../store/memory-store.js";
 import {
   buildContextPrompt,
   buildDirectContext,
+  buildCondensedIndex,
   type MemoryForContext,
 } from "../extractor/prompts.js";
 import { resolveAiConfig, callLLM } from "../extractor/llm.js";
 import { loadConfig } from "../config.js";
-import { printBanner, printError } from "../output/terminal.js";
+import { printBanner, printError, printWarning } from "../output/terminal.js";
+import { resolveAuthor } from "../utils/author.js";
+
+const MAX_LLM_CHARS = 60_000;
+const MAX_CONTEXT_CHARS = 32_000; // ~8,000 tokens — safe for most models
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
@@ -71,11 +76,20 @@ export async function runContext(opts: CliOptions): Promise<number> {
   const outputDir = config.output.dir;
   const language = config.output.language;
 
-  let memories = await readAllMemories(outputDir);
+  const author = opts.allAuthors ? undefined : await resolveAuthor(config, opts.author);
+  let memories = await readAllMemories(outputDir, author);
 
   if (memories.length === 0) {
     printError('No memories found. Run "ai-memory extract" first.');
     return 1;
+  }
+
+  if (!opts.includeResolved) {
+    memories = memories.filter((m) => m.status !== "resolved");
+  }
+
+  if (!opts.json && !opts.allAuthors) {
+    console.log(`Context for: ${author} (use --all-authors to include team)\n`);
   }
 
   if (opts.recent) {
@@ -109,14 +123,33 @@ export async function runContext(opts: CliOptions): Promise<number> {
       return 1;
     }
 
+    let llmMemories = memories;
+    const serialized = JSON.stringify(memories.map(toContextMemory), null, 2);
+    if (serialized.length > MAX_LLM_CHARS) {
+      const sorted = [...memories].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      const kept: ExtractedMemory[] = [];
+      let chars = 0;
+      for (const m of sorted) {
+        const size = JSON.stringify(toContextMemory(m)).length;
+        if (chars + size > MAX_LLM_CHARS && kept.length > 0) break;
+        kept.push(m);
+        chars += size;
+      }
+      const truncated = memories.length - kept.length;
+      if (truncated > 0 && !opts.json) {
+        printWarning(`${truncated} older memories truncated to fit context window (kept ${kept.length} most recent).`);
+      }
+      llmMemories = kept;
+    }
+
     const prompt = buildContextPrompt(
-      JSON.stringify(memories.map(toContextMemory), null, 2),
+      JSON.stringify(llmMemories.map(toContextMemory), null, 2),
       language,
       opts.topic
     );
 
     if (!opts.json) {
-      console.log(`\nGenerating context summary from ${memories.length} memories...`);
+      console.log(`\nGenerating context summary from ${llmMemories.length} memories...`);
     }
 
     try {
@@ -127,7 +160,41 @@ export async function runContext(opts: CliOptions): Promise<number> {
     }
   } else {
     // Direct template path: instant, free, lossless — recommended default
-    contextText = buildDirectContext(memories.map(toContextMemory), language, opts.topic);
+    // If too large, use tiered compression: recent memories get full detail,
+    // older ones are condensed to a one-line index (no information lost).
+    const fullText = buildDirectContext(memories.map(toContextMemory), language, opts.topic);
+    if (fullText.length > MAX_CONTEXT_CHARS && memories.length > 1) {
+      const sorted = [...memories].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      const detailed: ExtractedMemory[] = [];
+      const condensedBudget = 2_000; // reserve ~500 tokens for the condensed index
+      const detailBudget = MAX_CONTEXT_CHARS - condensedBudget;
+
+      for (const m of sorted) {
+        detailed.push(m);
+        const trial = buildDirectContext(detailed.map(toContextMemory), language, opts.topic);
+        if (trial.length > detailBudget && detailed.length > 1) {
+          detailed.pop();
+          break;
+        }
+      }
+
+      const detailedIds = new Set(detailed.map((m) => m.title + m.date));
+      const condensed = sorted.filter((m) => !detailedIds.has(m.title + m.date));
+
+      if (condensed.length > 0) {
+        const detailBlock = buildDirectContext(detailed.map(toContextMemory), language, opts.topic);
+        const indexBlock = buildCondensedIndex(condensed.map(toContextMemory), language);
+        contextText = detailBlock + "\n\n" + indexBlock;
+        if (!opts.json) {
+          printWarning(`${detailed.length} recent memories in full detail, ${condensed.length} older ones as index.`);
+          console.log(`   Use --recent or --topic to narrow scope, or --summarize for LLM compression.\n`);
+        }
+      } else {
+        contextText = fullText;
+      }
+    } else {
+      contextText = fullText;
+    }
   }
 
   const tokenCount = countTokensApprox(contextText);

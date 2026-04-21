@@ -4,6 +4,7 @@ import type { CliOptions, AiMemoryConfig } from "../types.js";
 import { DEFAULT_CONFIG } from "../types.js";
 import { detectSources } from "../sources/detector.js";
 import { printBanner } from "../output/terminal.js";
+import { resolveAuthor } from "../utils/author.js";
 
 const CONFIG_PATH = ".ai-memory/.config.json";
 const STATE_GITIGNORE_ENTRY = ".ai-memory/.state.json";
@@ -83,8 +84,13 @@ export async function runInit(opts: CliOptions): Promise<number> {
       config.sources.cursor.enabled = false;
       config.sources.claudeCode.enabled = false;
     }
+    // Auto-detect author from git / OS
+    const detectedAuthor = await resolveAuthor(config);
+    config.author = detectedAuthor;
+    if (!opts.json) console.log(`\n[+] Author detected: ${detectedAuthor}`);
+
     await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
-    if (!opts.json) console.log(`\n[+] Config written -> ${CONFIG_PATH}`);
+    if (!opts.json) console.log(`[+] Config written -> ${CONFIG_PATH}`);
   }
 
   // 4. Update .gitignore
@@ -105,7 +111,7 @@ Next steps:
      export AI_REVIEW_API_KEY=sk-...
 
   2. Extract memories from your conversations:
-     npx ai-memory extract
+     npx ai-memory-cli extract
 
   3. Commit your memories:
      git add .ai-memory/ && git commit -m "chore: add ai-memory knowledge base"
