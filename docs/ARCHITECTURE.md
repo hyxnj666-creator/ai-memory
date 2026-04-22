@@ -19,6 +19,7 @@
 │   ├── watch (auto-extract)                                      │
 │   ├── serve (start MCP)                                         │
 │   ├── reindex (embeddings)                                      │
+│   ├── dashboard (web UI)                                        │
 │   └── init                                                      │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -193,5 +194,8 @@ This format is:
 | `embeddings/hybrid-search.ts` | Hybrid search engine | `hybridSearch()` |
 | `embeddings/indexer.ts` | Index builder | `indexMemories()`, `indexSingleMemory()` |
 | `commands/watch.ts` | Watch mode (auto-extract) | `runWatch()` |
+| `commands/dashboard.ts` | Dashboard command entry | `runDashboard()` |
+| `dashboard/server.ts` | HTTP API server + routing | `startDashboard()` |
+| `dashboard/html.ts` | Embedded HTML template (SPA) | `getDashboardHtml()` |
 | `utils/author.ts` | Author resolution | `resolveAuthor()` |
 | `output/terminal.ts` | Terminal formatting | `ANSI`, `c`, `printBanner()`, `printError()` |

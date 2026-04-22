@@ -40,6 +40,10 @@ src/
 ?   ??? summary.ts            # Generate project summary
 ?   ??? context.ts            # Generate continuation prompt
 ?   ??? init.ts               # Initialize config
+?   ??? dashboard.ts          # Dashboard web UI command
+??? dashboard/
+?   ??? server.ts             # HTTP API server (node:http)
+?   ??? html.ts               # Embedded SPA template (Tailwind + D3.js)
 ??? sources/
 ?   ??? cursor.ts             # Cursor transcript parser
 ?   ??? claude-code.ts        # Claude Code session parser

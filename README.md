@@ -247,6 +247,27 @@ Press `Ctrl+C` to stop.
 
 ---
 
+## Dashboard (NEW)
+
+Browse, search, and visualize your knowledge base in a local web UI:
+
+```bash
+npx ai-memory-cli dashboard
+```
+
+Opens `http://localhost:3141` with:
+
+- **Overview** — stats cards, monthly timeline chart, author breakdown, recent activity
+- **Memory browser** — real-time search, filter by type/author/status, detail modal
+- **Knowledge graph** — interactive D3.js force-directed graph (nodes colored by type, edges by shared conversation or keywords)
+- **Export** — download as JSON, Obsidian vault (with YAML frontmatter), or copy to clipboard
+
+```bash
+npx ai-memory-cli dashboard --port 8080   # custom port
+```
+
+---
+
 ## Local LLM Support (NEW)
 
 Use Ollama or LM Studio instead of cloud APIs — **no API key needed**:

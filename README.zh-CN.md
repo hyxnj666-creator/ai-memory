@@ -160,6 +160,21 @@ npx ai-memory-cli init
 
 自动检测编辑器，创建 `.ai-memory/.config.json`，并将 `.state.json` 加入 `.gitignore`。
 
+### `dashboard` — 可视化面板
+
+在本地浏览器中浏览、搜索和可视化你的知识库：
+
+```bash
+npx ai-memory-cli dashboard                       # 打开 http://localhost:3141
+npx ai-memory-cli dashboard --port 8080            # 自定义端口
+```
+
+包含：
+- **总览页** — 统计卡片、月度时间线、作者分布、最近活动
+- **记忆浏览器** — 实时搜索、按类型/作者/状态过滤、点击查看详情
+- **知识图谱** — D3.js 力导向图，节点按类型着色，边连接同一对话来源或共享关键词
+- **导出** — JSON、Obsidian（含 YAML frontmatter）、剪贴板
+
 ---
 
 ## 提取维度

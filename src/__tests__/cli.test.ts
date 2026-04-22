@@ -212,4 +212,17 @@ describe("parseArgs", () => {
     expect(opts.positionalArgs).toEqual(["auth"]);
     expect(opts.author).toBe("alice");
   });
+
+  // --- dashboard command ---
+
+  it("parses dashboard command", () => {
+    const opts = parseArgs(["dashboard"]);
+    expect(opts.command).toBe("dashboard");
+  });
+
+  it("parses dashboard with --port", () => {
+    const opts = parseArgs(["dashboard", "--port", "8080"]);
+    expect(opts.command).toBe("dashboard");
+    expect(opts.port).toBe(8080);
+  });
 });

@@ -28,6 +28,7 @@ Commands:
   serve       Start MCP server (for Cursor, Claude Code, etc.)
   reindex     Build/rebuild semantic search embeddings
   watch       Watch for conversation changes and auto-extract
+  dashboard   Open local web UI for browsing memories
 
 List options:
   --source <type>       Filter by source: cursor, claude-code, windsurf, copilot
@@ -75,6 +76,9 @@ Watch options:
   --type <types>        Comma-separated memory types to extract
   --author <name>       Override author name
 
+Dashboard options:
+  --port <number>       Server port (default: 3141)
+
 Team options:
   --author <name>       Override auto-detected author name
   --all-authors         Include all authors' memories (summary/context)
@@ -96,7 +100,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex", "watch"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex", "watch", "dashboard"].includes(command)) {
     return { command: "help" };
   }
 
@@ -206,6 +210,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break;
       case "--debug":
         opts.debug = true;
+        break;
+      case "--port":
+        if (hasValue(next)) { opts.port = parseInt(next, 10) || undefined; i++; }
         break;
     }
   }

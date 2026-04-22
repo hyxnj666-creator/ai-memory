@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "dashboard" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -92,6 +92,8 @@ export interface CliOptions {
   positionalArgs?: string[];
   /** MCP server debug mode */
   debug?: boolean;
+  /** Dashboard server port */
+  port?: number;
 }
 
 // --- Config Types ---

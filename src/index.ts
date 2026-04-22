@@ -9,6 +9,7 @@ import { runRules } from "./commands/rules.js";
 import { runResolve } from "./commands/resolve.js";
 import { runReindex } from "./commands/reindex.js";
 import { runWatch } from "./commands/watch.js";
+import { runDashboard } from "./commands/dashboard.js";
 import { startMcpServer } from "./mcp/server.js";
 import { printError } from "./output/terminal.js";
 
@@ -57,6 +58,9 @@ switch (opts.command) {
     break;
   case "watch":
     run(runWatch(opts));
+    break;
+  case "dashboard":
+    run(runDashboard(opts));
     break;
   case "serve":
     startMcpServer(opts.debug ?? false).catch((err) => {

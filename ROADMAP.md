@@ -46,11 +46,11 @@ The CLI foundation is complete and published.
 - [x] `watch` command — auto-extract when conversations change (fs events + polling)
 - [x] Local LLM support — Ollama and LM Studio (zero API key needed)
 
-### Phase 4: Dashboard (Optional)
-- [ ] Local web UI for browsing and managing memories
-- [ ] Knowledge graph visualization
-- [ ] Team activity view
-- [ ] Export to Obsidian / Notion
+### Phase 4: Dashboard ✅
+- [x] Local web UI for browsing and managing memories (`dashboard` command)
+- [x] Knowledge graph visualization (D3.js force-directed graph)
+- [x] Overview with stats, timeline chart, author breakdown
+- [x] Export to Obsidian (YAML frontmatter) / JSON / Clipboard
 
 ## Future Ideas (Unscheduled)
 
@@ -70,4 +70,4 @@ These are ideas we're considering but haven't committed to:
 
 ---
 
-*Last updated: 2026-04-22*
+*Last updated: 2026-05-01*

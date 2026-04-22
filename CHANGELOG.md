@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added — Dashboard
+- **`dashboard` command** — local web UI for browsing, searching, and visualizing memories (`npx ai-memory-cli dashboard`)
+- **Overview page** — total/type/author stats, monthly timeline chart, recent activity feed
+- **Memory browser** — real-time search, filter by type/author/status, click-to-view detail modal
+- **Knowledge graph** — D3.js force-directed graph with nodes colored by type, edges by shared conversation or keywords; zoom, pan, drag support
+- **Export** — JSON dump, Obsidian vault (YAML frontmatter + tags + folder structure), clipboard copy
+- **`--port` flag** — custom server port (default: 3141)
+- Auto-opens browser on startup
+- 9 new unit tests for CLI parsing and HTML template
+
 ## [Unreleased] — Phase 3: More Sources + Watch Mode
 
 ### Added
