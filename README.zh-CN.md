@@ -13,7 +13,7 @@ npx ai-memory-cli rules            # 从约定自动生成 Cursor Rules
 npx ai-memory-cli context --copy   # 复制上下文，无缝续接任意会话
 ```
 
-从 AI 编辑器对话历史（Cursor、Claude Code）中提取结构化知识，保存为可 git 跟踪的 Markdown 文件。不再让技术决策、架构设计和 TODO 埋没在聊天记录里。
+从 AI 编辑器对话历史（Cursor、Claude Code、Windsurf、VS Code Copilot）中提取结构化知识，保存为可 git 跟踪的 Markdown 文件。不再让技术决策、架构设计和 TODO 埋没在聊天记录里。
 
 > **[English README](README.md)**
 
@@ -229,13 +229,79 @@ npx ai-memory-cli serve --debug   # 带调试日志
 
 ---
 
+## Watch 模式（新功能）
+
+对话发生变化时自动提取知识 — 零手动操作：
+
+```bash
+npx ai-memory-cli watch
+```
+
+Watch 模式监控所有检测到的来源，发现新对话活动时自动运行提取。使用文件系统事件（Cursor/Claude Code）和定期轮询（所有来源）来检测变化。
+
+```
+ai-memory watch — auto-extract on conversation changes
+
+   Author: conor
+   Output: .ai-memory/
+   [+] Watching: Cursor
+   [+] Watching: Claude Code
+
+Initial scan complete — watching for changes...
+
+10:15:32 [Cursor] "OAuth 重构讨论" (+8 turns) — extracting...
+10:15:37 [+] 2 decision, 1 convention
+```
+
+按 `Ctrl+C` 停止。
+
+---
+
+## 本地 LLM 支持（新功能）
+
+使用 Ollama 或 LM Studio 替代云 API — **无需 API key**：
+
+### Ollama
+
+```bash
+# 安装 Ollama: https://ollama.ai
+ollama pull llama3.2              # 下载模型
+ollama pull nomic-embed-text      # （可选）用于语义搜索
+
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=llama3.2      # 提取用模型
+npx ai-memory-cli extract
+```
+
+### LM Studio
+
+```bash
+# 启动 LM Studio 并加载一个模型
+export LM_STUDIO_BASE_URL=http://localhost:1234/v1
+export LM_STUDIO_MODEL=your-model-name
+npx ai-memory-cli extract
+```
+
+云 API key 始终优先于本地 LLM。如果设置了 `OPENAI_API_KEY` 或 `AI_REVIEW_API_KEY`，将优先使用云端。
+
+| 变量 | 说明 |
+|------|------|
+| `OLLAMA_HOST` | Ollama 服务地址（默认：`http://localhost:11434`） |
+| `OLLAMA_MODEL` | 提取用模型（默认：`llama3.2`） |
+| `OLLAMA_EMBEDDING_MODEL` | 语义搜索用模型（默认：`nomic-embed-text`） |
+| `LM_STUDIO_BASE_URL` | LM Studio 服务地址（默认：`http://localhost:1234/v1`） |
+| `LM_STUDIO_MODEL` | 模型名称 |
+
+---
+
 ## 支持的来源
 
-| 来源                  | 数据位置                                         | 状态             |
-| --------------------- | ------------------------------------------------ | ---------------- |
-| **Cursor**      | `~/.cursor/projects/{name}/agent-transcripts/` | 已支持           |
-| **Claude Code** | `~/.claude/projects/{path}/*.jsonl`            | Beta（自动检测） |
-| Windsurf              | 本地存储路径未公开                               | 计划中           |
+| 来源                  | 数据位置                                                       | 状态   |
+| --------------------- | -------------------------------------------------------------- | ------ |
+| **Cursor**      | `~/.cursor/projects/{name}/agent-transcripts/`               | 已支持 |
+| **Claude Code** | `~/.claude/projects/{path}/*.jsonl`                          | 已支持 |
+| **Windsurf**    | `~/AppData/Windsurf/User/workspaceStorage/*/state.vscdb`     | Beta   |
+| **VS Code Copilot** | `~/AppData/Code/User/workspaceStorage/*/chatSessions/*.json` | Beta   |
 
 ---
 
@@ -365,7 +431,9 @@ git commit && git push
 {
   "sources": {
     "cursor": { "enabled": true, "projectName": "my-project" },
-    "claudeCode": { "enabled": true }
+    "claudeCode": { "enabled": true },
+    "windsurf": { "enabled": true },
+    "copilot": { "enabled": true }
   },
   "extract": {
     "types": ["decision", "architecture", "convention", "todo", "issue"],
@@ -384,16 +452,21 @@ git commit && git push
 
 ### 环境变量
 
-| 变量                   | 说明                                        |
-| ---------------------- | ------------------------------------------- |
-| `AI_REVIEW_API_KEY`  | API key（推荐，与 ai-review-pipeline 共用） |
-| `OPENAI_API_KEY`     | OpenAI API key                              |
-| `OPENAI_BASE_URL`    | 自定义 OpenAI 兼容 API 地址                 |
-| `OPENAI_MODEL`       | OpenAI 模型覆盖                             |
-| `ANTHROPIC_API_KEY`  | Anthropic API key（需兼容代理）             |
-| `ANTHROPIC_BASE_URL` | Anthropic 代理地址                          |
-| `AI_REVIEW_BASE_URL` | 自定义 API 地址                             |
-| `AI_REVIEW_MODEL`    | 使用的模型（默认：`gpt-4o-mini`）         |
+| 变量                   | 说明                                            |
+| ---------------------- | ----------------------------------------------- |
+| `AI_REVIEW_API_KEY`  | API key（推荐，与 ai-review-pipeline 共用）     |
+| `OPENAI_API_KEY`     | OpenAI API key                                  |
+| `OPENAI_BASE_URL`    | 自定义 OpenAI 兼容 API 地址                     |
+| `OPENAI_MODEL`       | OpenAI 模型覆盖                                 |
+| `ANTHROPIC_API_KEY`  | Anthropic API key（需兼容代理）                 |
+| `ANTHROPIC_BASE_URL` | Anthropic 代理地址                              |
+| `AI_REVIEW_BASE_URL` | 自定义 API 地址                                 |
+| `AI_REVIEW_MODEL`    | 使用的模型（默认：`gpt-4o-mini`）             |
+| `OLLAMA_HOST`        | Ollama 服务地址（默认：`http://localhost:11434`）|
+| `OLLAMA_MODEL`       | Ollama 提取用模型                               |
+| `OLLAMA_EMBEDDING_MODEL` | Ollama 语义搜索嵌入模型                     |
+| `LM_STUDIO_BASE_URL` | LM Studio API 地址                              |
+| `LM_STUDIO_MODEL`    | LM Studio 模型名称                              |
 
 ---
 
@@ -440,9 +513,9 @@ git commit && git push
 ## 环境要求
 
 - Node.js >= 18
-- 任意 OpenAI 兼容提供商的 API key
+- 任意 OpenAI 兼容提供商的 API key，**或**本地 LLM（Ollama / LM Studio）
 
-> **提示：** Node.js 22+ 可通过读取 Cursor 数据库获取更准确的对话标题。Node 18-20 会从首条消息提取标题（正常使用不受影响）。
+> **提示：** Node.js 22+ 可通过读取 Cursor/Windsurf 数据库获取更准确的对话标题。Node 18-20 会从首条消息提取标题（正常使用不受影响）。
 
 ## License
 

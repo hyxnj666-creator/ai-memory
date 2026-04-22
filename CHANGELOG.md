@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] — Phase 3: More Sources + Watch Mode
+
+### Added
+- **Windsurf support** — extract conversations from Windsurf's `state.vscdb` SQLite database (chat mode, JSON-based data)
+- **VS Code Copilot Chat support** — extract conversations from `.json` and `.jsonl` session files in VS Code workspace storage
+- **`watch` command** — auto-extract knowledge when conversations change; uses `fs.watch` for Cursor/Claude Code and periodic polling for all sources
+- **Local LLM support** — use Ollama or LM Studio for extraction and embeddings without cloud API keys; auto-detected via `OLLAMA_HOST`/`OLLAMA_MODEL` or `LM_STUDIO_BASE_URL`/`LM_STUDIO_MODEL`
+- 27 new unit tests for Windsurf, Copilot, CLI args, and local LLM config resolution
+
+### Changed
+- `--source` option now accepts `windsurf` and `copilot` in addition to `cursor` and `claude-code`
+- Source labels display user-friendly names (e.g. "VS Code Copilot" instead of "copilot")
+- `resolveAiConfig` falls back to Ollama/LM Studio when no cloud API key is set
+- `resolveEmbeddingConfig` uses `nomic-embed-text` for Ollama instead of `text-embedding-3-small`
+- Config `.sources` now includes `windsurf` and `copilot` entries (both enabled by default)
+- Updated README (EN & ZH), ROADMAP, ARCHITECTURE, AGENTS, DEVELOPMENT docs
+
+### Fixed
+- Windsurf/Copilot SQLite temp file cleanup uses `try/finally` to prevent leaks
+- Watch mode initial scan logic uses explicit `initialized` flag instead of fragile size comparison
+
 ## [2.0.1] - 2026-04-21
 
 ### Fixed

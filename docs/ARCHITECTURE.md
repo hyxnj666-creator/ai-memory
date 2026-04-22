@@ -58,10 +58,10 @@
 
 ```
 1. Source Detection
-   detector.ts → finds Cursor/Claude Code conversation files
+   detector.ts → finds Cursor/Claude Code/Windsurf/Copilot conversations
 
 2. Conversation Loading
-   cursor.ts / claude-code.ts → parses JSONL into Conversation objects
+   cursor.ts / claude-code.ts / windsurf.ts / copilot.ts → parses into Conversation objects
 
 3. Filtering
    extract.ts → applies --pick, --since, --incremental, ignore list, min turns
@@ -95,16 +95,20 @@
 
 ## Key Design Decisions
 
-### Zero Runtime Dependencies
+### Minimal Runtime Dependencies
 
-All functionality uses Node.js built-ins:
+Core functionality uses Node.js built-ins wherever possible:
 - `node:fs/promises` — file operations
 - `node:path`, `node:os` — paths and platform detection
 - `node:child_process` — git user.name, clipboard
 - Global `fetch` — LLM API calls (Node 18+)
-- `node:sqlite` — Cursor title map (Node 22+, optional with fallback)
+- `node:sqlite` — Cursor/Windsurf title map (Node 22+, optional with fallback)
 
-This keeps `npx` execution fast and eliminates supply chain risk.
+Only two runtime dependencies are added for MCP support:
+- `@modelcontextprotocol/sdk` — MCP server protocol
+- `zod` — MCP tool parameter validation
+
+This keeps `npx` execution fast and minimizes supply chain risk.
 
 ### Chunked Extraction
 

@@ -1,7 +1,7 @@
 {
   "name": "ai-memory-cli",
   "version": "2.0.1",
-  "description": "AI memory layer for code editors — extract knowledge, MCP server, semantic search (Cursor, Claude Code)",
+  "description": "AI memory layer for code editors — extract knowledge, MCP server, semantic search (Cursor, Claude Code, Windsurf, VS Code Copilot)",
   "type": "module",
   "bin": {
     "ai-memory": "dist/index.js"

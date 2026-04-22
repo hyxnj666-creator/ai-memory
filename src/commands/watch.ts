@@ -1,9 +1,8 @@
-import { watch, stat } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { watch } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { CliOptions, ConversationMeta, Source } from "../types.js";
 import { getConversationState } from "../types.js";
-import { detectSources } from "../sources/detector.js";
-import { sourceLabel } from "../sources/detector.js";
+import { detectSources, sourceLabel } from "../sources/detector.js";
 import { extractMemories } from "../extractor/ai-extractor.js";
 import { writeMemories } from "../store/memory-store.js";
 import { loadState, saveState, markProcessed } from "../store/state.js";
@@ -53,6 +52,7 @@ export async function runWatch(opts: CliOptions): Promise<number> {
 
   const knownState = new Map<string, number>();
   let processing = false;
+  let initialized = false;
 
   const processConversation = async (
     source: Source,
@@ -129,24 +129,18 @@ export async function runWatch(opts: CliOptions): Promise<number> {
 
         for (const meta of conversations) {
           const prevMtime = knownState.get(meta.id);
+
+          if (!initialized) {
+            knownState.set(meta.id, meta.modifiedAt);
+            continue;
+          }
+
           if (prevMtime !== undefined && meta.modifiedAt <= prevMtime) continue;
 
           knownState.set(meta.id, meta.modifiedAt);
 
-          // Skip initial scan — only process changes after startup
-          if (prevMtime === undefined && knownState.size > conversations.length) {
-            continue;
-          }
-
           if (prevMtime !== undefined) {
             await processConversation(source, meta);
-          }
-        }
-
-        // On first scan, just record the state
-        if (knownState.size <= conversations.length) {
-          for (const meta of conversations) {
-            knownState.set(meta.id, meta.modifiedAt);
           }
         }
       }
@@ -155,8 +149,8 @@ export async function runWatch(opts: CliOptions): Promise<number> {
     }
   };
 
-  // Initial scan to populate known state
   await scanSources();
+  initialized = true;
   console.log(`${c.dim("Initial scan complete — watching for changes...")}\n`);
 
   // Periodic polling (works for all sources including SQLite-based ones)
@@ -207,7 +201,7 @@ async function watchFileSource(
 
     try {
       const watcher = watch(dir, { signal, recursive: true });
-      for await (const event of watcher) {
+      for await (const _event of watcher) {
         if (signal.aborted) break;
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {

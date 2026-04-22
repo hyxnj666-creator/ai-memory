@@ -1,4 +1,4 @@
-import { readdir, stat, copyFile, unlink, mkdir } from "node:fs/promises";
+import { readdir, stat, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import type {
@@ -92,13 +92,14 @@ export class WindsurfSource implements Source {
       }
 
       const rows = await this.queryDb(tmpDb, this.chatDataKeys());
-      cleanup();
 
       for (const [key, value] of rows) {
         const conversations = this.parseChatData(value, key, dbPath, dbStat.mtimeMs, workspaceId);
         metas.push(...conversations);
       }
     } catch {
+      // DB read or parse failed
+    } finally {
       cleanup();
     }
 
@@ -122,13 +123,14 @@ export class WindsurfSource implements Source {
       }
 
       const rows = await this.queryDb(tmpDb, this.chatDataKeys());
-      cleanup();
 
       for (const [key, value] of rows) {
         const turns = this.extractTurnsFromChatData(value, conversationId);
         if (turns.length > 0) return turns;
       }
     } catch {
+      // DB read failed
+    } finally {
       cleanup();
     }
 
