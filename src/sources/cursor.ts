@@ -1,4 +1,4 @@
-import { readdir, readFile, stat, copyFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, stat, copyFile, mkdir, unlink } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import type {
@@ -339,19 +339,23 @@ export class CursorSource implements Source {
    * Uses node:sqlite (Node.js 22+). Silently returns empty map on any error.
    */
   private async loadTitleMap(): Promise<Map<string, string>> {
-    try {
-      const dbPath = this.getGlobalDbPath();
-      if (!dbPath) return new Map();
+    const dbPath = this.getGlobalDbPath();
+    if (!dbPath) return new Map();
 
-      // Copy db + WAL + SHM to temp to avoid lock conflicts when Cursor is running
-      const ts = Date.now();
-      const tmpDb = join(tmpdir(), `ai-memory-global-${ts}.vscdb`);
+    const ts = Date.now();
+    const tmpDb = join(tmpdir(), `ai-memory-global-${ts}.vscdb`);
+    const tmpFiles = [tmpDb, tmpDb + "-wal", tmpDb + "-shm"];
+
+    const cleanup = () => {
+      for (const f of tmpFiles) unlink(f).catch(() => {});
+    };
+
+    try {
       await copyFile(dbPath, tmpDb);
       for (const ext of ["-wal", "-shm"]) {
         try { await copyFile(dbPath + ext, tmpDb + ext); } catch { /* optional */ }
       }
 
-      // Dynamic specifier prevents esbuild from stripping the "node:" prefix
       const sqliteMod = "node" + ":sqlite";
       const { DatabaseSync } = await import(sqliteMod);
       const db = new (DatabaseSync as new (p: string, opts?: Record<string, unknown>) => {
@@ -359,10 +363,16 @@ export class CursorSource implements Source {
         close(): void;
       })(tmpDb, { readonly: true });
 
-      const row = db
-        .prepare("SELECT value FROM ItemTable WHERE key = ?")
-        .get("composer.composerHeaders") as { value?: string } | undefined;
-      db.close();
+      let row: { value?: string } | undefined;
+      try {
+        row = db
+          .prepare("SELECT value FROM ItemTable WHERE key = ?")
+          .get("composer.composerHeaders") as { value?: string } | undefined;
+      } finally {
+        db.close();
+      }
+
+      cleanup();
 
       if (!row?.value) return new Map();
 
@@ -378,7 +388,7 @@ export class CursorSource implements Source {
       }
       return map;
     } catch (err) {
-      // Non-fatal — fall back to first-message title extraction
+      cleanup();
       process.stderr.write(`[ai-memory] title map load failed: ${err}\n`);
       return new Map();
     }

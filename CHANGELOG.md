@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.1] - 2026-04-21
+
+### Fixed
+- **Critical: temp file leak** — `loadTitleMap()` copied Cursor's `state.vscdb` (~5-7 GB) to temp on every call but never cleaned up. With MCP server running continuously, this caused disk space exhaustion. Now uses try/finally to guarantee cleanup in all code paths.
+
 ## [2.0.0] - 2026-04-21
 
 ### Added — MCP Server
