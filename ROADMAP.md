@@ -52,6 +52,15 @@ The CLI foundation is complete and published.
 - [x] Overview with stats, timeline chart, author breakdown
 - [x] Export to Obsidian (YAML frontmatter) / JSON / Clipboard
 
+### Phase 5: Core Algorithm Quality ✅ (v2.2.0)
+- [x] CJK-aware tokenizer (bigrams + trigrams + bilingual stopwords)
+- [x] Containment-based semantic subsumption dedup
+- [x] Cross-extraction dedup (new vs existing memories on disk)
+- [x] Conversation noise stripping (tool calls, hashes, data URIs)
+- [x] Multi-signal vague content detection (22 specificity patterns)
+- [x] Strengthened extraction prompt with quality checklist + WHY-BAD examples
+- [x] Measured: vague rate ↓68%, duplicate pairs auto-merged
+
 ## Future Ideas (Unscheduled)
 
 These are ideas we're considering but haven't committed to:

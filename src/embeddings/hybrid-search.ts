@@ -16,7 +16,71 @@ const W_SEMANTIC = 0.55;
 const W_KEYWORD = 0.30;
 const W_RECENCY = 0.15;
 
-// --- Keyword scoring (reused from existing search logic) ---
+// --- CJK-aware tokenizer ---
+
+const CJK_RANGE = /[\u4e00-\u9fff\u3400-\u4dbf\uF900-\uFAFF]/;
+
+const EN_STOPWORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+  "should", "may", "might", "must", "can", "could", "to", "of", "in",
+  "for", "on", "with", "at", "by", "from", "as", "into", "through",
+  "and", "but", "or", "nor", "not", "no", "so", "if", "then", "than",
+  "that", "this", "it", "its", "i", "we", "you", "he", "she", "they",
+  "my", "your", "his", "her", "our", "their", "me", "him", "us", "them",
+]);
+
+const CJK_STOPWORDS = new Set([
+  "的", "了", "在", "是", "我", "有", "和", "就", "不", "人",
+  "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去",
+  "你", "会", "着", "没有", "看", "好", "自己", "这",
+]);
+
+/**
+ * Tokenize a query string into searchable keywords.
+ * - Latin: split on whitespace, filter stopwords, keep tokens >= 2 chars
+ * - CJK: individual chars, bigrams, and trigrams (multi-granularity)
+ *   e.g. "提取策略" → ["提取", "取策", "策略", "提取策", "取策略"]
+ *   (single chars only if not stopwords)
+ */
+export function tokenize(text: string): string[] {
+  const lower = text.toLowerCase();
+  const tokens: string[] = [];
+  let latinBuf = "";
+
+  for (let i = 0; i < lower.length; i++) {
+    const ch = lower[i];
+    if (CJK_RANGE.test(ch)) {
+      if (latinBuf.trim()) {
+        for (const w of latinBuf.trim().split(/\s+/)) {
+          if (w && !EN_STOPWORDS.has(w) && w.length >= 2) tokens.push(w);
+        }
+        latinBuf = "";
+      }
+      if (!CJK_STOPWORDS.has(ch)) tokens.push(ch);
+      // Bigrams
+      if (i + 1 < lower.length && CJK_RANGE.test(lower[i + 1])) {
+        const bigram = lower.slice(i, i + 2);
+        if (!CJK_STOPWORDS.has(bigram)) tokens.push(bigram);
+      }
+      // Trigrams — higher precision for multi-char terms
+      if (i + 2 < lower.length && CJK_RANGE.test(lower[i + 1]) && CJK_RANGE.test(lower[i + 2])) {
+        tokens.push(lower.slice(i, i + 3));
+      }
+    } else {
+      latinBuf += ch;
+    }
+  }
+  if (latinBuf.trim()) {
+    for (const w of latinBuf.trim().split(/\s+/)) {
+      if (w && !EN_STOPWORDS.has(w) && w.length >= 2) tokens.push(w);
+    }
+  }
+
+  return [...new Set(tokens)];
+}
+
+// --- Keyword scoring with field weighting and match-length bonus ---
 
 function keywordScore(m: ExtractedMemory, keywords: string[]): number {
   if (keywords.length === 0) return 0;
@@ -24,13 +88,18 @@ function keywordScore(m: ExtractedMemory, keywords: string[]): number {
   const titleLow = m.title.toLowerCase();
   const contentLow = m.content.toLowerCase();
   const contextLow = (m.context || "").toLowerCase();
+
   for (const kw of keywords) {
-    if (titleLow.includes(kw)) score += 10;
-    if (contentLow.includes(kw)) score += 5;
-    if (contextLow.includes(kw)) score += 2;
+    const len = kw.length;
+    // Longer keyword matches are worth more (trigram > bigram > unigram)
+    const lengthBonus = len >= 3 ? 2 : len >= 2 ? 1.2 : 1;
+
+    if (titleLow.includes(kw)) score += 10 * lengthBonus;
+    if (contentLow.includes(kw)) score += 5 * lengthBonus;
+    if (contextLow.includes(kw)) score += 2 * lengthBonus;
     if (m.type.includes(kw)) score += 3;
-    if (m.reasoning?.toLowerCase().includes(kw)) score += 1;
-    if (m.impact?.toLowerCase().includes(kw)) score += 1;
+    if (m.reasoning?.toLowerCase().includes(kw)) score += 1 * lengthBonus;
+    if (m.impact?.toLowerCase().includes(kw)) score += 1 * lengthBonus;
   }
   return score;
 }
@@ -98,7 +167,7 @@ export async function hybridSearch(
 
   if (filtered.length === 0) return [];
 
-  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const keywords = tokenize(query);
 
   // Keyword scores
   const kwScores = filtered.map((m) => keywordScore(m, keywords));
@@ -167,7 +236,7 @@ export function keywordOnlySearch(
     filtered = filtered.filter((m) => m.author === opts.author);
   }
 
-  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const keywords = tokenize(query);
   const kwScores = filtered.map((m) => keywordScore(m, keywords));
   const kwNorm = normalize(kwScores);
   const recScores = filtered.map((m) => recencyScore(m.date));

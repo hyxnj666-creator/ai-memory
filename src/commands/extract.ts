@@ -96,7 +96,7 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   const breakdown: Record<string, number> = {};
   let totalMemories = 0;
   let errorCount = 0;
-  let totalQuality: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0 };
+  let totalQuality: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0 };
   const total = allConversations.length;
 
   // 4. Process in parallel batches of CONCURRENCY
@@ -145,12 +145,14 @@ export async function runExtract(opts: CliOptions): Promise<number> {
         const extractOpts = { ...opts, types: effectiveTypes };
         let memories: ExtractedMemory[];
         try {
-          const result = await extractMemories(conversation, extractOpts, fromTurn, config.model || undefined);
+          const result = await extractMemories(conversation, extractOpts, fromTurn, config.model || undefined, outputDir);
           memories = result.memories;
           totalQuality.total += result.qualityStats.total;
           totalQuality.kept += result.qualityStats.kept;
           totalQuality.filteredShort += result.qualityStats.filteredShort;
           totalQuality.filteredDuplicate += result.qualityStats.filteredDuplicate;
+          totalQuality.filteredVague += result.qualityStats.filteredVague;
+          totalQuality.filteredExistingDup += result.qualityStats.filteredExistingDup;
         } catch (err) {
           if (!opts.json) console.log(`   [${idx}/${total}] "${meta.title.slice(0, 45)}" — error: ${err}`);
           errorCount++;
@@ -205,13 +207,19 @@ export async function runExtract(opts: CliOptions): Promise<number> {
     return errorCount > 0 ? 1 : 0;
   }
 
-  const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate;
+  const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate + totalQuality.filteredVague + totalQuality.filteredExistingDup;
   if (opts.json) {
     console.log(JSON.stringify({ total: totalMemories, breakdown, qualityFiltered: qualityDropped }));
   } else {
     printSummary(totalMemories, outputDir, breakdown);
     if (qualityDropped > 0) {
-      console.log(`   (${qualityDropped} low-quality filtered: ${totalQuality.filteredShort} too short, ${totalQuality.filteredDuplicate} title≈content)`);
+      const parts = [
+        totalQuality.filteredShort > 0 ? `${totalQuality.filteredShort} short` : "",
+        totalQuality.filteredDuplicate > 0 ? `${totalQuality.filteredDuplicate} title≈content` : "",
+        totalQuality.filteredVague > 0 ? `${totalQuality.filteredVague} vague` : "",
+        totalQuality.filteredExistingDup > 0 ? `${totalQuality.filteredExistingDup} existing dup` : "",
+      ].filter(Boolean).join(", ");
+      console.log(`   (${qualityDropped} low-quality filtered: ${parts})`);
     }
   }
 

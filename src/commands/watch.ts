@@ -85,7 +85,8 @@ export async function runWatch(opts: CliOptions): Promise<number> {
         conversation,
         { ...opts, types: effectiveTypes },
         fromTurn,
-        config.model || undefined
+        config.model || undefined,
+        outputDir
       );
 
       for (const m of result.memories) m.author = author;

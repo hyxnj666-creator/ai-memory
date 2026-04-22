@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.2.0] - 2026-04-01
+
+### Core Algorithm Overhaul — Extraction & Retrieval Quality
+
+Measured on 239 real-world memories: **vague rate ↓68%** (52.3% → 16.7%), 27 duplicate pairs detected and auto-merged, **score≥5 high-specificity memories ↑4×**.
+
+#### Added
+- **CJK-aware tokenizer with trigrams + stopwords** (`src/embeddings/hybrid-search.ts`)
+  - Chinese/Japanese/Korean text now generates character bigrams AND trigrams for higher precision
+  - Bilingual stopword filtering (`的/了/在/是` + `the/a/is/and...`)
+  - Match-length scoring bonus: trigram matches worth 2×, bigram 1.2×, unigram 1×
+- **Containment-based semantic subsumption** (`containmentSimilarity` in `ai-extractor.ts`)
+  - Asymmetric comparison: if 75%+ of smaller memory's shingles appear in larger, it's merged
+  - Complements existing Jaccard dedup, catching short memories subsumed by longer ones
+- **Cross-extraction deduplication** — new memories are compared against existing memories on disk (not just within the current extraction run)
+- **Conversation noise stripping** (`stripConversationNoise`) — pre-processes conversation text to remove tool call blocks, hex/base64 hashes, data URIs, and truncate runaway log lines before LLM invocation
+- **Multi-signal vague content detection** (`isVagueContent` + `specificityScore`)
+  - 22 regex patterns detect technical indicators: file paths, function calls, CLI flags, API routes, SQL keywords, git/npm commands, kebab-case package names, CONSTANT env vars, version numbers, template vars
+  - Counts ALL matches (not just pattern presence) for accurate density measurement
+  - Expanded bilingual vague-phrase dictionary (~35 phrases)
+  - File extension support expanded to: mjs/cjs/toml/env/md/vue/svelte/astro/proto and more
+- **Stronger extraction prompt** (`src/extractor/prompts.ts`)
+  - New EXTRACTION PROCESS (3-step chain-of-thought) and QUALITY CHECKLIST (5 criteria)
+  - 3 GOOD examples covering decision/architecture/issue types (was 1)
+  - Each BAD example annotated with "WHY BAD" explanation
+  - Optional `existingTitles` context so LLM avoids re-extracting overlapping knowledge
+- **QualityStats tracking** — per-run metrics for `filteredShort`, `filteredDuplicate`, `filteredVague`, `filteredExistingDup`
+- **`scripts/diagnose-quality.ts`** — retroactive quality diagnostic for existing memory stores
+- 64 new tests (245 total passing)
+
+#### Changed
+- `deduplicateMemories` now uses Jaccard (threshold 0.55) + Containment (threshold 0.75) for multi-angle dedup
+- `extractMemories` accepts `outputDir` and loads existing memories for cross-extraction dedup
+- Hybrid search keyword scoring now respects token-length weighting
+
 ## [2.1.0] - 2026-05-01
 
 ### Added — More Sources + Watch Mode

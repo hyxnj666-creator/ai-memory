@@ -6,12 +6,44 @@ import type {
 } from "../types.js";
 import { buildExtractionPrompt } from "./prompts.js";
 import { resolveAiConfig, callLLM } from "./llm.js";
+import { readAllMemories } from "../store/memory-store.js";
 
 const CHUNK_SIZE = 20_000;   // chars (~5k tokens) per LLM call
 const CHUNK_OVERLAP = 2_000; // chars of context carried over between chunks
 const VALID_TYPES = new Set<string>(["decision", "architecture", "convention", "todo", "issue"]);
 
 // --- Text processing ---
+
+/**
+ * Strip noise patterns from conversation text that add no extractable knowledge
+ * but consume LLM context window and degrade extraction quality.
+ */
+export function stripConversationNoise(text: string): string {
+  let cleaned = text;
+
+  // Tool call XML blocks (Cursor/Claude): <tool_call>...</tool_call>, <invoke>...</invoke>
+  cleaned = cleaned.replace(/<(?:tool_call|antml:invoke|function_call)[^>]*>[\s\S]*?<\/(?:tool_call|antml:invoke|function_call)>/g, "[tool call]");
+
+  // Tool result blocks
+  cleaned = cleaned.replace(/<(?:tool_result|function_result)[^>]*>[\s\S]*?<\/(?:tool_result|function_result)>/g, "[tool output]");
+
+  // Long hex/base64 hashes (>= 32 chars of hex or base64-like patterns)
+  cleaned = cleaned.replace(/\b[0-9a-f]{32,}\b/gi, "[hash]");
+  cleaned = cleaned.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, "[base64]");
+
+  // Data URIs
+  cleaned = cleaned.replace(/data:[^;]+;base64,[A-Za-z0-9+/=]+/g, "[data-uri]");
+
+  // Very long single-line outputs (> 500 chars without newline) — likely logs/dumps
+  cleaned = cleaned.replace(/^.{500,}$/gm, (line) => {
+    return line.slice(0, 120) + "... [truncated " + line.length + " chars]";
+  });
+
+  // Collapse consecutive blank lines
+  cleaned = cleaned.replace(/\n{4,}/g, "\n\n\n");
+
+  return cleaned;
+}
 
 function conversationToText(convo: Conversation, fromTurn = 0): string {
   const lines: string[] = [];
@@ -23,7 +55,7 @@ function conversationToText(convo: Conversation, fromTurn = 0): string {
     const prefix = turn.role === "user" ? "User" : "Assistant";
     lines.push(`${prefix}: ${text}`);
   }
-  return lines.join("\n\n");
+  return stripConversationNoise(lines.join("\n\n"));
 }
 
 function splitIntoChunks(text: string): string[] {
@@ -66,11 +98,140 @@ function normalizeTitle(title: string): string {
     .trim();
 }
 
-function contentFingerprint(content: string): string {
-  return content.slice(0, 120).toLowerCase().replace(/\s+/g, " ").trim();
+/**
+ * Extract character 3-gram shingles from text.
+ * Works for both CJK and Latin text since it operates at character level.
+ */
+export function shingles(text: string, n = 3): Set<string> {
+  const clean = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const result = new Set<string>();
+  for (let i = 0; i <= clean.length - n; i++) {
+    result.add(clean.slice(i, i + n));
+  }
+  return result;
+}
+
+/**
+ * Jaccard similarity between two shingle sets: |A ∩ B| / |A ∪ B|.
+ * Returns 0-1 where 1 means identical content.
+ */
+export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const s of a) {
+    if (b.has(s)) intersection++;
+  }
+  return intersection / (a.size + b.size - intersection);
+}
+
+/**
+ * Containment similarity: |A ∩ B| / |A|.
+ * Measures what fraction of A appears in B — asymmetric.
+ * Useful for subsumption: if containment(small, large) > 0.8,
+ * the smaller memory is mostly captured by the larger one.
+ */
+export function containmentSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0) return 1;
+  let intersection = 0;
+  for (const s of a) {
+    if (b.has(s)) intersection++;
+  }
+  return intersection / a.size;
 }
 
 const MIN_CONTENT_LENGTH = 30;
+
+// Phrases that indicate content is too abstract to be useful
+const VAGUE_PHRASES_ZH = [
+  "影响到整个项目", "优化了用户体验", "提高了效率", "改善了性能",
+  "影响到整个", "确保系统稳定", "提高代码质量", "优化了整体",
+  "影响到项目的", "符合最佳实践", "遵循最佳实践", "影响较大",
+  "提升了开发效率", "保证了代码质量", "确保了系统", "增强了功能",
+  "方便了开发", "简化了流程", "实现了功能", "满足了需求",
+  "对项目有重要意义", "是一个好的选择",
+];
+const VAGUE_PHRASES_EN = [
+  "affects the entire project", "improves user experience", "improves efficiency",
+  "improves performance", "ensures system stability", "improves code quality",
+  "follows best practices", "affects the whole", "is a good choice",
+  "enhances the functionality", "simplifies the process", "meets the requirements",
+  "is important for the project", "makes development easier",
+  "ensures code quality", "improves the overall",
+];
+
+// Patterns that indicate concrete technical content — each match adds specificity.
+// Use global flag so we can count ALL matches, not just presence.
+const SPECIFICITY_PATTERNS: RegExp[] = [
+  /[./\\][\w-]+\.\w{1,5}\b/g,                                              // file paths e.g. ./src/x.ts
+  /(?:function|class|interface|type|const|let|var|def|fn|func|struct|enum)\s+\w+/g,  // declarations
+  /\b[a-z_][\w]*\([^)]*\)/g,                                               // function calls foo()
+  /\/api\/[\w/]+/g,                                                         // API routes
+  /\/v\d+\//g,                                                             // versioned APIs
+  /`[^`\n]{2,}`/g,                                                         // inline code refs `xxx`
+  /(?:config|process\.env|import|require|from)\s*[.(]\s*['"]?\w+/g,        // config/import refs
+  /\b\w+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|swift|c|cpp|h|hpp|json|yaml|yml|toml|ini|env|md|mdx|sql|sh|bash|zsh|ps1|css|scss|sass|html|vue|svelte|astro|xml|csv|proto)\b/g,  // file extensions
+  /https?:\/\/\S+/g,                                                       // URLs
+  /\blocalhost:\d+/g,                                                      // local servers
+  /\b(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|JOIN|WHERE|GROUP BY|ORDER BY)\b/gi,  // SQL
+  /\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\/[\w/-]*/g,            // HTTP + route
+  /\bv?\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?\b/g,                                 // version numbers v1.2.3
+  /[\w-]+\/[\w-]+(?:\/[\w.-]+)+/g,                                         // module/path-like
+  /\B--[a-z][\w-]*/g,                                                      // CLI flags --foo
+  /\B-[a-zA-Z]\b/g,                                                        // short CLI flags -f
+  /\b[a-z][\w]*(?:-[\w]+){1,}\b/gi,                                        // kebab-case tool/package names
+  /\b[A-Z][A-Z0-9_]{2,}\b/g,                                               // CONSTANTS / env var names
+  /\$\{?\w+\}?/g,                                                          // template vars ${x}
+  /\bnpm\s+(?:install|i|run|publish|version)\b/g,                          // npm commands
+  /\bgit\s+(?:add|commit|push|pull|merge|rebase|checkout|log|diff|status|tag)\b/g,  // git commands
+];
+
+/**
+ * Count technical specificity indicators in text.
+ * Counts ALL matches across patterns (e.g. 3 file paths + 2 functions = 5).
+ * This gives more accurate density measurement than "pattern presence".
+ */
+export function specificityScore(text: string): number {
+  let score = 0;
+  for (const pattern of SPECIFICITY_PATTERNS) {
+    const matches = text.match(pattern);
+    if (matches) score += matches.length;
+  }
+  return score;
+}
+
+/**
+ * Detect vague/abstract content that lacks concrete technical specifics.
+ * Uses a multi-signal approach:
+ * 1. Vague phrase detection (expanded bilingual list)
+ * 2. Technical specificity scoring (must have ≥ 2 concrete indicators for longer content)
+ * 3. Length-based thresholds
+ * Returns true if the content should be filtered out.
+ */
+export function isVagueContent(content: string, impact?: string): boolean {
+  const contentLow = content.toLowerCase();
+  const spec = specificityScore(content);
+
+  // Vague phrases: only filter if no technical specifics compensate
+  const hasVaguePhraseZH = VAGUE_PHRASES_ZH.some((p) => contentLow.includes(p));
+  const hasVaguePhraseEN = VAGUE_PHRASES_EN.some((p) => contentLow.includes(p));
+
+  if (hasVaguePhraseZH || hasVaguePhraseEN) {
+    if (spec < 1) return true;
+  }
+
+  // Short content without any technical indicator
+  if (content.length < 80 && spec === 0) return true;
+
+  // Medium-length content: require at least some technical substance
+  // (threshold lower than before since specificityScore now counts all matches)
+  if (content.length >= 80 && content.length < 200 && spec === 0) {
+    const impactSpec = impact ? specificityScore(impact) : 0;
+    if (spec + impactSpec === 0) return true;
+  }
+
+  return false;
+}
 
 function stripPunctuation(s: string): string {
   return s.toLowerCase().replace(/[^\w\u4e00-\u9fff]/g, "");
@@ -94,10 +255,15 @@ export interface QualityStats {
   kept: number;
   filteredShort: number;
   filteredDuplicate: number;
+  filteredVague: number;
+  filteredExistingDup: number;
 }
 
 function qualityFilter(memories: ExtractedMemory[]): { memories: ExtractedMemory[]; stats: QualityStats } {
-  const stats: QualityStats = { total: memories.length, kept: 0, filteredShort: 0, filteredDuplicate: 0 };
+  const stats: QualityStats = {
+    total: memories.length, kept: 0,
+    filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0,
+  };
 
   const filtered = memories.filter((m) => {
     if (m.content.length < MIN_CONTENT_LENGTH) {
@@ -108,6 +274,10 @@ function qualityFilter(memories: ExtractedMemory[]): { memories: ExtractedMemory
       stats.filteredDuplicate++;
       return false;
     }
+    if (isVagueContent(m.content, m.impact)) {
+      stats.filteredVague++;
+      return false;
+    }
     return true;
   });
 
@@ -115,19 +285,94 @@ function qualityFilter(memories: ExtractedMemory[]): { memories: ExtractedMemory
   return { memories: filtered, stats };
 }
 
+const SHINGLE_DEDUP_THRESHOLD = 0.55;
+const CONTAINMENT_THRESHOLD = 0.75;
+
 function deduplicateMemories(memories: ExtractedMemory[]): ExtractedMemory[] {
   const seenTitles = new Set<string>();
-  const seenContent = new Set<string>();
+  const kept: ExtractedMemory[] = [];
+  const keptShingles: Array<{ mem: ExtractedMemory; sh: Set<string> }> = [];
 
-  return memories.filter((m) => {
+  for (const m of memories) {
     const titleKey = normalizeTitle(m.title);
-    if (seenTitles.has(titleKey)) return false;
+    if (seenTitles.has(titleKey)) continue;
 
-    const contentKey = contentFingerprint(m.content);
-    if (contentKey.length > 20 && seenContent.has(contentKey)) return false;
+    const sh = shingles(m.content);
 
-    seenTitles.add(titleKey);
-    if (contentKey.length > 20) seenContent.add(contentKey);
+    let isDup = false;
+    for (const existing of keptShingles) {
+      if (existing.mem.type !== m.type) continue;
+
+      const jaccard = jaccardSimilarity(sh, existing.sh);
+      if (jaccard > SHINGLE_DEDUP_THRESHOLD) {
+        if (m.content.length > existing.mem.content.length) {
+          const idx = kept.indexOf(existing.mem);
+          if (idx >= 0) {
+            kept[idx] = m;
+            existing.mem = m;
+            existing.sh = sh;
+          }
+        }
+        isDup = true;
+        break;
+      }
+
+      // Containment check: if the smaller memory is subsumed by the larger
+      const [smaller, larger] = sh.size <= existing.sh.size
+        ? [sh, existing.sh]
+        : [existing.sh, sh];
+      if (containmentSimilarity(smaller, larger) > CONTAINMENT_THRESHOLD) {
+        // Keep the more complete memory
+        if (m.content.length > existing.mem.content.length) {
+          const idx = kept.indexOf(existing.mem);
+          if (idx >= 0) {
+            kept[idx] = m;
+            existing.mem = m;
+            existing.sh = sh;
+          }
+        }
+        isDup = true;
+        break;
+      }
+    }
+
+    if (!isDup) {
+      seenTitles.add(titleKey);
+      kept.push(m);
+      keptShingles.push({ mem: m, sh });
+    }
+  }
+
+  return kept;
+}
+
+/**
+ * Remove new memories that duplicate existing ones already on disk.
+ * Uses both symmetric (Jaccard) and asymmetric (containment) comparison.
+ */
+function deduplicateAgainstExisting(
+  newMemories: ExtractedMemory[],
+  existingMemories: ExtractedMemory[]
+): ExtractedMemory[] {
+  if (existingMemories.length === 0) return newMemories;
+
+  const existingByType = new Map<string, Array<Set<string>>>();
+  for (const em of existingMemories) {
+    const list = existingByType.get(em.type) ?? [];
+    list.push(shingles(em.content));
+    existingByType.set(em.type, list);
+  }
+
+  return newMemories.filter((m) => {
+    const typeShingles = existingByType.get(m.type);
+    if (!typeShingles) return true;
+
+    const mSh = shingles(m.content);
+    for (const eSh of typeShingles) {
+      if (jaccardSimilarity(mSh, eSh) > SHINGLE_DEDUP_THRESHOLD) return false;
+      // New memory subsumed by existing? Also a duplicate.
+      if (containmentSimilarity(mSh, eSh) > CONTAINMENT_THRESHOLD) return false;
+    }
     return true;
   });
 }
@@ -185,26 +430,39 @@ export async function extractMemories(
   conversation: Conversation,
   opts: CliOptions,
   fromTurn = 0,
-  modelOverride?: string
+  modelOverride?: string,
+  outputDir?: string
 ): Promise<ExtractionResult> {
   const config = resolveAiConfig(modelOverride);
   if (!config) {
     throw new Error("No AI API key found. Set AI_REVIEW_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.");
   }
   const verbose = opts.verbose ?? false;
+  const emptyStats: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0 };
 
   const text = conversationToText(conversation, fromTurn);
-  if (!text.trim()) return { memories: [], qualityStats: { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0 } };
+  if (!text.trim()) return { memories: [], qualityStats: emptyStats };
 
   const actualDate = new Date(conversation.meta.modifiedAt)
     .toISOString()
     .slice(0, 10);
   const chunks = splitIntoChunks(text);
 
+  // Load existing memories for cross-extraction dedup
+  let existingMemories: ExtractedMemory[] = [];
+  if (outputDir) {
+    try { existingMemories = await readAllMemories(outputDir); } catch { /* ignore */ }
+  }
+
+  // Build existing-memory title list for prompt context
+  const existingTitles = existingMemories.length > 0
+    ? existingMemories.slice(0, 50).map((m) => `[${m.type}] ${m.title}`).join("\n")
+    : "";
+
   let raw: ExtractedMemory[];
 
   if (chunks.length === 1) {
-    const prompt = buildExtractionPrompt(chunks[0], opts.types, actualDate);
+    const prompt = buildExtractionPrompt(chunks[0], opts.types, actualDate, existingTitles);
     const result = await callLLM(prompt, config, verbose);
     raw = parseExtractionResult(result, conversation);
   } else {
@@ -215,7 +473,7 @@ export async function extractMemories(
     const results = await Promise.all(
       chunks.map(async (chunk, i) => {
         const chunkLabel = ` [part ${i + 1}/${total}]`;
-        const prompt = buildExtractionPrompt(chunk + chunkLabel, opts.types, actualDate);
+        const prompt = buildExtractionPrompt(chunk + chunkLabel, opts.types, actualDate, existingTitles);
         const result = await callLLM(prompt, config, verbose);
         done++;
         if (total > 5 && done % 5 === 0) {
@@ -228,10 +486,19 @@ export async function extractMemories(
     raw = deduplicateMemories(results.flat());
   }
 
-  const { memories, stats } = qualityFilter(raw);
-  const dropped = stats.filteredShort + stats.filteredDuplicate;
+  const { memories: filtered, stats } = qualityFilter(raw);
+
+  // Cross-extraction dedup: remove new memories that already exist on disk
+  const beforeCrossDedup = filtered.length;
+  const memories = deduplicateAgainstExisting(filtered, existingMemories);
+  stats.filteredExistingDup = beforeCrossDedup - memories.length;
+  stats.kept = memories.length;
+
+  const dropped = stats.filteredShort + stats.filteredDuplicate + stats.filteredVague + stats.filteredExistingDup;
   if (dropped > 0 && verbose) {
-    process.stderr.write(`[quality] ${dropped} low-quality filtered (${stats.filteredShort} too short, ${stats.filteredDuplicate} title≈content)\n`);
+    process.stderr.write(
+      `[quality] ${dropped} filtered (${stats.filteredShort} short, ${stats.filteredDuplicate} title≈content, ${stats.filteredVague} vague, ${stats.filteredExistingDup} existing dup)\n`
+    );
   }
 
   return { memories, qualityStats: stats };
