@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [2.1.0] - 2026-05-01
+
+### Added — More Sources + Watch Mode
+- **Windsurf support** — extract conversations from Windsurf's `state.vscdb` SQLite database (chat mode, JSON-based data)
+- **VS Code Copilot Chat support** — extract conversations from `.json` and `.jsonl` session files in VS Code workspace storage
+- **`watch` command** — auto-extract knowledge when conversations change; uses `fs.watch` for Cursor/Claude Code and periodic polling for all sources
+- **Local LLM support** — use Ollama or LM Studio for extraction and embeddings without cloud API keys; auto-detected via `OLLAMA_HOST`/`OLLAMA_MODEL` or `LM_STUDIO_BASE_URL`/`LM_STUDIO_MODEL`
 
 ### Added — Dashboard
 - **`dashboard` command** — local web UI for browsing, searching, and visualizing memories (`npx ai-memory-cli dashboard`)
@@ -10,16 +16,7 @@
 - **Export** — JSON dump, Obsidian vault (YAML frontmatter + tags + folder structure), clipboard copy
 - **`--port` flag** — custom server port (default: 3141)
 - Auto-opens browser on startup
-- 9 new unit tests for CLI parsing and HTML template
-
-## [Unreleased] — Phase 3: More Sources + Watch Mode
-
-### Added
-- **Windsurf support** — extract conversations from Windsurf's `state.vscdb` SQLite database (chat mode, JSON-based data)
-- **VS Code Copilot Chat support** — extract conversations from `.json` and `.jsonl` session files in VS Code workspace storage
-- **`watch` command** — auto-extract knowledge when conversations change; uses `fs.watch` for Cursor/Claude Code and periodic polling for all sources
-- **Local LLM support** — use Ollama or LM Studio for extraction and embeddings without cloud API keys; auto-detected via `OLLAMA_HOST`/`OLLAMA_MODEL` or `LM_STUDIO_BASE_URL`/`LM_STUDIO_MODEL`
-- 27 new unit tests for Windsurf, Copilot, CLI args, and local LLM config resolution
+- 36 new unit tests (Windsurf, Copilot, CLI, LLM config, Dashboard)
 
 ### Changed
 - `--source` option now accepts `windsurf` and `copilot` in addition to `cursor` and `claude-code`
@@ -27,7 +24,8 @@
 - `resolveAiConfig` falls back to Ollama/LM Studio when no cloud API key is set
 - `resolveEmbeddingConfig` uses `nomic-embed-text` for Ollama instead of `text-embedding-3-small`
 - Config `.sources` now includes `windsurf` and `copilot` entries (both enabled by default)
-- Updated README (EN & ZH), ROADMAP, ARCHITECTURE, AGENTS, DEVELOPMENT docs
+- Dashboard API uses 5s memory cache for performance
+- EADDRINUSE graceful error with port suggestion
 
 ### Fixed
 - Windsurf/Copilot SQLite temp file cleanup uses `try/finally` to prevent leaks
