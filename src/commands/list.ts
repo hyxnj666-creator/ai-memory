@@ -1,5 +1,5 @@
 import type { CliOptions, ConversationMeta } from "../types.js";
-import { detectSources, createSource } from "../sources/detector.js";
+import { detectSources, createSource, sourceLabel } from "../sources/detector.js";
 import { loadState } from "../store/state.js";
 import { hasMemoryFile } from "../store/memory-store.js";
 import { loadConfig } from "../config.js";
@@ -42,6 +42,8 @@ export async function runList(opts: CliOptions): Promise<number> {
       if (!sourcesConfig) return true;
       if (s.type === "cursor") return sourcesConfig.cursor.enabled !== false;
       if (s.type === "claude-code") return sourcesConfig.claudeCode.enabled !== false;
+      if (s.type === "windsurf") return sourcesConfig.windsurf?.enabled !== false;
+      if (s.type === "copilot") return sourcesConfig.copilot?.enabled !== false;
       return true;
     });
     for (const s of filtered) {
@@ -107,7 +109,7 @@ export async function runList(opts: CliOptions): Promise<number> {
       ? `${COL.yellow}[~]${COL.reset}`
       : `${COL.dim}[ ]${COL.reset}`;
     const title = truncateToWidth(c.title, 55);
-    const sourceTag = c.source === "cursor" ? "" : `${COL.dim}[${c.source}]${COL.reset} `;
+    const sourceTag = c.source === "cursor" ? "" : `${COL.dim}[${sourceLabel(c.source)}]${COL.reset} `;
 
     console.log(`${COL.cyan}${idx}${COL.reset}  ${date}  ${turns}  ${status}  ${sourceTag}${title}`);
   }

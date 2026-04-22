@@ -18,7 +18,10 @@ export async function loadConfig(outputDir = ".ai-memory"): Promise<AiMemoryConf
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
-      sources: { ...DEFAULT_CONFIG.sources, ...parsed.sources },
+      sources: {
+        ...DEFAULT_CONFIG.sources,
+        ...parsed.sources,
+      },
       extract: { ...DEFAULT_CONFIG.extract, ...parsed.extract },
       output: { ...DEFAULT_CONFIG.output, ...parsed.output },
     };

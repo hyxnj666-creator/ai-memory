@@ -20,10 +20,17 @@ export interface EmbeddingConfig {
 export function resolveEmbeddingConfig(modelOverride?: string): EmbeddingConfig | null {
   const llm = resolveAiConfig();
   if (!llm) return null;
+
+  // For local LLMs, use their native embedding model
+  const isLocal = llm.apiKey === "ollama" || llm.apiKey === "lm-studio";
+  const defaultModel = isLocal
+    ? (process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text")
+    : DEFAULT_EMBEDDING_MODEL;
+
   return {
     apiKey: llm.apiKey,
     baseUrl: llm.baseUrl,
-    model: modelOverride || DEFAULT_EMBEDDING_MODEL,
+    model: modelOverride || defaultModel,
   };
 }
 

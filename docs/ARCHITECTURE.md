@@ -8,14 +8,17 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        User Interfaces                          │
 │                                                                 │
-│   CLI (src/index.ts)              MCP Server (v2, planned)      │
+│   CLI (src/index.ts)              MCP Server (src/mcp/)         │
 │   ├── extract                     ├── remember tool             │
 │   ├── list                        ├── recall tool               │
-│   ├── search                      ├── search tool               │
+│   ├── search (hybrid)             ├── search_memories tool      │
 │   ├── rules                       └── project-context resource  │
 │   ├── resolve                                                   │
 │   ├── summary                                                   │
 │   ├── context                                                   │
+│   ├── watch (auto-extract)                                      │
+│   ├── serve (start MCP)                                         │
+│   ├── reindex (embeddings)                                      │
 │   └── init                                                      │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -25,7 +28,13 @@
 │   Extractor              Store              Sources             │
 │   ├── ai-extractor.ts    ├── memory-store   ├── cursor.ts       │
 │   ├── llm.ts             └── state.ts       ├── claude-code.ts  │
-│   └── prompts.ts                            └── detector.ts     │
+│   └── prompts.ts                            ├── windsurf.ts     │
+│                                             ├── copilot.ts      │
+│   Embeddings                                └── detector.ts     │
+│   ├── embed.ts (API)                                            │
+│   ├── vector-store.ts                                           │
+│   ├── hybrid-search.ts                                          │
+│   └── indexer.ts                                                │
 │                                                                 │
 │   Config (config.ts)     Types (types.ts)   Utils (author.ts)   │
 └─────────────────────────────────────────────────────────────────┘
@@ -38,6 +47,7 @@
 │   ├── .index/{author}/*.json    Extraction index                │
 │   ├── .config.json              Project configuration           │
 │   ├── .state.json               Processing state (gitignored)   │
+│   ├── .embeddings.json          Vector store (gitignored)       │
 │   └── SUMMARY.md                Generated summary               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -169,5 +179,15 @@ This format is:
 | `store/state.ts` | Processing state | `loadState()`, `saveState()`, `markProcessed()` |
 | `sources/cursor.ts` | Cursor parser | `CursorSource` class |
 | `sources/claude-code.ts` | Claude Code parser | `ClaudeCodeSource` class |
+| `sources/windsurf.ts` | Windsurf parser (SQLite) | `WindsurfSource` class |
+| `sources/copilot.ts` | VS Code Copilot parser | `CopilotSource` class |
+| `mcp/server.ts` | MCP server setup | `startMcpServer()` |
+| `mcp/tools.ts` | MCP tool handlers | `registerTools()` |
+| `mcp/resources.ts` | MCP resource providers | `registerResources()` |
+| `embeddings/embed.ts` | Embedding API client | `embedText()`, `embedBatch()` |
+| `embeddings/vector-store.ts` | Vector storage | `loadVectorStore()`, `saveVectorStore()` |
+| `embeddings/hybrid-search.ts` | Hybrid search engine | `hybridSearch()` |
+| `embeddings/indexer.ts` | Index builder | `indexMemories()`, `indexSingleMemory()` |
+| `commands/watch.ts` | Watch mode (auto-extract) | `runWatch()` |
 | `utils/author.ts` | Author resolution | `resolveAuthor()` |
 | `output/terminal.ts` | Terminal formatting | `ANSI`, `c`, `printBanner()`, `printError()` |

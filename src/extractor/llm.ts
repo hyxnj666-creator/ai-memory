@@ -32,6 +32,8 @@ export interface LLMConfig {
 
 /**
  * Resolve LLM config from environment variables.
+ * Priority: AI_REVIEW > OPENAI > ANTHROPIC (with proxy) > OLLAMA > LM_STUDIO
+ * Local LLMs (Ollama, LM Studio) work without API keys.
  * @param modelOverride Optionally override the model (e.g. from .config.json `model` field).
  */
 export function resolveAiConfig(modelOverride?: string): LLMConfig | null {
@@ -72,6 +74,26 @@ export function resolveAiConfig(modelOverride?: string): LLMConfig | null {
       };
     }
   }
+
+  // Local LLM fallback: Ollama (http://localhost:11434/v1)
+  const ollamaHost = process.env.OLLAMA_HOST ?? "http://localhost:11434";
+  if (process.env.OLLAMA_HOST || process.env.OLLAMA_MODEL) {
+    return {
+      apiKey: "ollama",
+      baseUrl: `${ollamaHost}/v1`,
+      model: modelOverride || process.env.OLLAMA_MODEL || "llama3.2",
+    };
+  }
+
+  // Local LLM fallback: LM Studio (http://localhost:1234/v1)
+  if (process.env.LM_STUDIO_BASE_URL || process.env.LM_STUDIO_MODEL) {
+    return {
+      apiKey: "lm-studio",
+      baseUrl: process.env.LM_STUDIO_BASE_URL ?? "http://localhost:1234/v1",
+      model: modelOverride || process.env.LM_STUDIO_MODEL || "default",
+    };
+  }
+
   return null;
 }
 

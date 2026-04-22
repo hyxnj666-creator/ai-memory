@@ -46,6 +46,20 @@ describe("parseArgs", () => {
     expect(opts.source).toBe("claude-code");
   });
 
+  it("parses --source windsurf", () => {
+    const opts = parseArgs(["extract", "--source", "windsurf"]);
+    expect(opts.source).toBe("windsurf");
+  });
+
+  it("parses --source copilot", () => {
+    const opts = parseArgs(["extract", "--source", "copilot"]);
+    expect(opts.source).toBe("copilot");
+  });
+
+  it("parses watch command", () => {
+    expect(parseArgs(["watch"])).toMatchObject({ command: "watch" });
+  });
+
   it("parses --incremental flag", () => {
     const opts = parseArgs(["extract", "--incremental"]);
     expect(opts.incremental).toBe(true);

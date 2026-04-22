@@ -6,7 +6,7 @@ import type {
   ExtractionState,
 } from "../types.js";
 import { getConversationState } from "../types.js";
-import { detectSources, createSource } from "../sources/detector.js";
+import { detectSources, createSource, sourceLabel } from "../sources/detector.js";
 import { extractMemories, type QualityStats } from "../extractor/ai-extractor.js";
 import { writeMemories, hasMemoryFile, type WriteResult } from "../store/memory-store.js";
 import { loadState, saveState, markProcessed } from "../store/state.js";
@@ -220,7 +220,12 @@ export async function runExtract(opts: CliOptions): Promise<number> {
 
 async function resolveSources(
   opts: CliOptions,
-  sourcesConfig?: { cursor: { enabled: boolean; projectName?: string }; claudeCode: { enabled: boolean } }
+  sourcesConfig?: {
+    cursor: { enabled: boolean; projectName?: string };
+    claudeCode: { enabled: boolean };
+    windsurf?: { enabled: boolean };
+    copilot?: { enabled: boolean };
+  }
 ): Promise<Source[]> {
   const projectName = sourcesConfig?.cursor?.projectName;
   if (opts.source) {
@@ -236,21 +241,22 @@ async function resolveSources(
   if (!opts.json) printDetecting();
   const { available, unavailable } = await detectSources(projectName);
 
-  // Filter by sources.*.enabled from config
   const filtered = available.filter((s) => {
     if (!sourcesConfig) return true;
     if (s.type === "cursor") return sourcesConfig.cursor.enabled !== false;
     if (s.type === "claude-code") return sourcesConfig.claudeCode.enabled !== false;
+    if (s.type === "windsurf") return sourcesConfig.windsurf?.enabled !== false;
+    if (s.type === "copilot") return sourcesConfig.copilot?.enabled !== false;
     return true;
   });
 
   if (!opts.json) {
     for (const s of filtered) {
       const convos = await s.listConversations();
-      printSourceFound(s.type === "cursor" ? "Cursor" : "Claude Code", convos.length);
+      printSourceFound(sourceLabel(s.type), convos.length);
     }
     for (const t of unavailable) {
-      printSourceNotFound(t === "cursor" ? "Cursor" : "Claude Code");
+      printSourceNotFound(sourceLabel(t));
     }
   }
 

@@ -8,6 +8,7 @@ import { runSearch } from "./commands/search.js";
 import { runRules } from "./commands/rules.js";
 import { runResolve } from "./commands/resolve.js";
 import { runReindex } from "./commands/reindex.js";
+import { runWatch } from "./commands/watch.js";
 import { startMcpServer } from "./mcp/server.js";
 import { printError } from "./output/terminal.js";
 
@@ -53,6 +54,9 @@ switch (opts.command) {
     break;
   case "reindex":
     run(runReindex(opts));
+    break;
+  case "watch":
+    run(runWatch(opts));
     break;
   case "serve":
     startMcpServer(opts.debug ?? false).catch((err) => {

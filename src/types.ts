@@ -1,6 +1,6 @@
 // --- Data Source Types ---
 
-export type SourceType = "cursor" | "claude-code";
+export type SourceType = "cursor" | "claude-code" | "windsurf" | "copilot";
 
 export interface ConversationMeta {
   id: string;
@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -100,6 +100,8 @@ export interface AiMemoryConfig {
   sources: {
     cursor: { enabled: boolean; projectName?: string };
     claudeCode: { enabled: boolean };
+    windsurf: { enabled: boolean };
+    copilot: { enabled: boolean };
   };
   extract: {
     types: MemoryType[];
@@ -122,6 +124,8 @@ export const DEFAULT_CONFIG: AiMemoryConfig = {
   sources: {
     cursor: { enabled: true },
     claudeCode: { enabled: true },
+    windsurf: { enabled: true },
+    copilot: { enabled: true },
   },
   extract: {
     types: ["decision", "architecture", "convention", "todo", "issue"],

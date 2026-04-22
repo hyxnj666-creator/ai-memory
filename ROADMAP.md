@@ -40,11 +40,11 @@ The CLI foundation is complete and published.
 - [x] Hybrid retrieval: semantic + keyword + time decay
 - [x] Automatic re-indexing on `remember`, manual via `reindex` command
 
-### Phase 3: More Sources + Watch Mode
-- [ ] Windsurf conversation support
-- [ ] VS Code Copilot Chat support
-- [ ] File system watcher — auto-extract when conversations change
-- [ ] Local LLM support (Ollama, LM Studio)
+### Phase 3: More Sources + Watch Mode ✅
+- [x] Windsurf conversation support (chat mode via SQLite)
+- [x] VS Code Copilot Chat support (JSON/JSONL session files)
+- [x] `watch` command — auto-extract when conversations change (fs events + polling)
+- [x] Local LLM support — Ollama and LM Studio (zero API key needed)
 
 ### Phase 4: Dashboard (Optional)
 - [ ] Local web UI for browsing and managing memories
@@ -70,4 +70,4 @@ These are ideas we're considering but haven't committed to:
 
 ---
 
-*Last updated: 2026-04-21*
+*Last updated: 2026-04-22*

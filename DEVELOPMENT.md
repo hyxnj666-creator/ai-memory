@@ -43,6 +43,8 @@ src/
 ??? sources/
 ?   ??? cursor.ts             # Cursor transcript parser
 ?   ??? claude-code.ts        # Claude Code session parser
+?   ??? windsurf.ts           # Windsurf (SQLite chat data)
+?   ??? copilot.ts            # VS Code Copilot Chat (JSON sessions)
 ?   ??? detector.ts           # Auto-detect available sources
 ??? extractor/
 ?   ??? ai-extractor.ts       # AI extraction core (chunking, quality filter)
@@ -71,8 +73,8 @@ Conversation Sources          Extractor                    Storage
 
 ## Key Design Decisions
 
-- **Zero runtime dependencies** ? only devDependencies
-- **Multi-source architecture** ? Source interface abstraction for easy new editors
+- **Minimal runtime dependencies** ? only MCP SDK + zod
+- **Multi-source architecture** ? Source interface abstraction for 4 editors (Cursor, Claude Code, Windsurf, VS Code Copilot)
 - **Chunked extraction** ? conversations split at turn boundaries, ~5k tokens/chunk
 - **Quality filtering** ? short content + title-content similarity check
 - **Team-aware storage** ? per-author subdirectories, no merge conflicts

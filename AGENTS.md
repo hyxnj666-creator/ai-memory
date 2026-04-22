@@ -26,6 +26,8 @@ src/
 ├── sources/              # Conversation parsers (one per editor)
 │   ├── cursor.ts         # Reads ~/.cursor/projects/*/agent-transcripts/
 │   ├── claude-code.ts    # Reads ~/.claude/projects/*/*.jsonl
+│   ├── windsurf.ts       # Reads Windsurf state.vscdb (SQLite)
+│   ├── copilot.ts        # Reads VS Code chatSessions/*.json
 │   └── detector.ts       # Auto-detects available sources
 ├── extractor/
 │   ├── ai-extractor.ts   # Chunking, LLM calls, dedup, quality filter
@@ -71,9 +73,13 @@ src/
 
 ### Adding a new conversation source
 1. Create `src/sources/my-editor.ts` implementing the `Source` interface
-2. Add to `detector.ts` detection logic
+2. Add to `detector.ts` detection logic (import, add to `candidates[]` and `createSource`)
 3. Add to `SourceType` union in `types.ts`
-4. Add config field in `AiMemoryConfig.sources`
+4. Add config field in `AiMemoryConfig.sources` and `DEFAULT_CONFIG`
+5. Add source filter in `extract.ts` `resolveSources()` and `list.ts`
+6. Add `sourceLabel()` entry in `detector.ts`
+7. Add tests in `src/__tests__/`
+8. Update README.md Supported Sources table
 
 ### Adding a new memory type
 1. Add to `MemoryType` union in `types.ts`

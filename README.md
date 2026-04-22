@@ -13,7 +13,7 @@ npx ai-memory-cli rules            # generate Cursor Rules from your conventions
 npx ai-memory-cli context --copy   # resume any session with full context
 ```
 
-Extract structured knowledge from AI editor conversations (Cursor, Claude Code) and save it as git-trackable Markdown files. Stop losing decisions, architecture notes, and conventions buried in chat history.
+Extract structured knowledge from AI editor conversations (Cursor, Claude Code, Windsurf, VS Code Copilot) and save it as git-trackable Markdown files. Stop losing decisions, architecture notes, and conventions buried in chat history.
 
 > **[中文文档](README.zh-CN.md)**
 
@@ -219,13 +219,79 @@ npx ai-memory-cli serve --debug   # with debug logging
 
 ---
 
+## Watch Mode (NEW)
+
+Automatically extract knowledge when conversations change — zero manual effort:
+
+```bash
+npx ai-memory-cli watch
+```
+
+Watch mode monitors all detected sources for new conversation activity and runs extraction automatically. It uses file system events (for Cursor/Claude Code) and periodic polling (for all sources) to detect changes.
+
+```
+ai-memory watch — auto-extract on conversation changes
+
+   Author: conor
+   Output: .ai-memory/
+   [+] Watching: Cursor
+   [+] Watching: Claude Code
+
+Initial scan complete — watching for changes...
+
+10:15:32 [Cursor] "OAuth refactor discussion" (+8 turns) — extracting...
+10:15:37 [+] 2 decision, 1 convention
+```
+
+Press `Ctrl+C` to stop.
+
+---
+
+## Local LLM Support (NEW)
+
+Use Ollama or LM Studio instead of cloud APIs — **no API key needed**:
+
+### Ollama
+
+```bash
+# Install Ollama: https://ollama.ai
+ollama pull llama3.2              # download a model
+ollama pull nomic-embed-text      # (optional) for semantic search
+
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=llama3.2      # extraction model
+npx ai-memory-cli extract
+```
+
+### LM Studio
+
+```bash
+# Start LM Studio and load a model
+export LM_STUDIO_BASE_URL=http://localhost:1234/v1
+export LM_STUDIO_MODEL=your-model-name
+npx ai-memory-cli extract
+```
+
+Cloud API keys always take priority over local LLM. If you have `OPENAI_API_KEY` or `AI_REVIEW_API_KEY` set, those will be used.
+
+| Variable | Description |
+|----------|-------------|
+| `OLLAMA_HOST` | Ollama server URL (default: `http://localhost:11434`) |
+| `OLLAMA_MODEL` | Model for extraction (default: `llama3.2`) |
+| `OLLAMA_EMBEDDING_MODEL` | Model for semantic search (default: `nomic-embed-text`) |
+| `LM_STUDIO_BASE_URL` | LM Studio server URL (default: `http://localhost:1234/v1`) |
+| `LM_STUDIO_MODEL` | Model name |
+
+---
+
 ## Supported Sources
 
 | Source | Data location | Status |
 |--------|---------------|--------|
-| **Cursor** | `~/.cursor/projects/{name}/agent-transcripts/` | Supported |
-| **Claude Code** | `~/.claude/projects/{path}/*.jsonl` | Beta (auto-detected) |
-| Windsurf | Storage path not yet public | Planned |
+| **Cursor** | `~/.cursor/projects/{name}/agent-transcripts/` | Stable |
+| **Claude Code** | `~/.claude/projects/{path}/*.jsonl` | Stable |
+| **Windsurf** | `~/AppData/Windsurf/User/workspaceStorage/*/state.vscdb` | Beta |
+| **VS Code Copilot** | `~/AppData/Code/User/workspaceStorage/*/chatSessions/*.json` | Beta |
 
 ---
 
@@ -355,7 +421,9 @@ git commit && git push
 {
   "sources": {
     "cursor": { "enabled": true, "projectName": "my-project" },
-    "claudeCode": { "enabled": true }
+    "claudeCode": { "enabled": true },
+    "windsurf": { "enabled": true },
+    "copilot": { "enabled": true }
   },
   "extract": {
     "types": ["decision", "architecture", "convention", "todo", "issue"],
@@ -384,6 +452,11 @@ git commit && git push
 | `ANTHROPIC_BASE_URL` | Anthropic proxy base URL |
 | `AI_REVIEW_BASE_URL` | Custom API base URL |
 | `AI_REVIEW_MODEL` | Model to use (default: `gpt-4o-mini`) |
+| `OLLAMA_HOST` | Ollama server URL (default: `http://localhost:11434`) |
+| `OLLAMA_MODEL` | Ollama model for extraction |
+| `OLLAMA_EMBEDDING_MODEL` | Ollama model for semantic search embeddings |
+| `LM_STUDIO_BASE_URL` | LM Studio API URL |
+| `LM_STUDIO_MODEL` | LM Studio model name |
 
 ---
 
@@ -430,9 +503,9 @@ Add `.ai-memory/.state.json` to `.gitignore` — it tracks which conversations h
 ## Requirements
 
 - Node.js >= 18
-- An API key for any OpenAI-compatible provider
+- An API key for any OpenAI-compatible provider, **or** a local LLM (Ollama / LM Studio)
 
-> **Tip:** Node.js 22+ enables richer conversation titles by reading Cursor's database. On Node 18-20, titles are extracted from the first message (still works fine).
+> **Tip:** Node.js 22+ enables richer conversation titles by reading Cursor/Windsurf's database. On Node 18-20, titles are extracted from the first message (still works fine).
 
 ## License
 

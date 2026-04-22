@@ -1,6 +1,8 @@
 import type { Source, SourceType } from "../types.js";
 import { CursorSource } from "./cursor.js";
 import { ClaudeCodeSource } from "./claude-code.js";
+import { WindsurfSource } from "./windsurf.js";
+import { CopilotSource } from "./copilot.js";
 
 interface DetectionResult {
   available: Source[];
@@ -13,6 +15,8 @@ export async function detectSources(
   const candidates: Source[] = [
     new CursorSource(projectName),
     new ClaudeCodeSource(),
+    new WindsurfSource(),
+    new CopilotSource(),
   ];
 
   const available: Source[] = [];
@@ -39,7 +43,22 @@ export function createSource(
       return new CursorSource(projectName);
     case "claude-code":
       return new ClaudeCodeSource();
+    case "windsurf":
+      return new WindsurfSource();
+    case "copilot":
+      return new CopilotSource();
     default:
       throw new Error(`Source type "${type}" is not yet supported`);
   }
+}
+
+const SOURCE_LABELS: Record<SourceType, string> = {
+  cursor: "Cursor",
+  "claude-code": "Claude Code",
+  windsurf: "Windsurf",
+  copilot: "VS Code Copilot",
+};
+
+export function sourceLabel(type: SourceType): string {
+  return SOURCE_LABELS[type] ?? type;
 }

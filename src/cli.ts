@@ -27,12 +27,13 @@ Commands:
   init        Initialize config and detect editors
   serve       Start MCP server (for Cursor, Claude Code, etc.)
   reindex     Build/rebuild semantic search embeddings
+  watch       Watch for conversation changes and auto-extract
 
 List options:
-  --source <type>       Filter by source: cursor, claude-code
+  --source <type>       Filter by source: cursor, claude-code, windsurf, copilot
 
 Extract options:
-  --source <type>       Source type: cursor, claude-code
+  --source <type>       Source type: cursor, claude-code, windsurf, copilot
   --pick <index>        Process only conversation(s) by list index, e.g. --pick 3 or --pick 1,4,7
   --id <prefix>         Process only conversation matching this ID prefix
   --since <time>        Only process conversations after this time
@@ -70,6 +71,10 @@ Context options:
 Serve options:
   --debug               Show debug logs on stderr
 
+Watch options:
+  --type <types>        Comma-separated memory types to extract
+  --author <name>       Override author name
+
 Team options:
   --author <name>       Override auto-detected author name
   --all-authors         Include all authors' memories (summary/context)
@@ -91,7 +96,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "rules", "resolve", "serve", "reindex", "watch"].includes(command)) {
     return { command: "help" };
   }
 
@@ -131,7 +136,7 @@ export function parseArgs(argv: string[]): CliOptions {
 
     switch (arg) {
       case "--source":
-        if (next === "cursor" || next === "claude-code") {
+        if (next === "cursor" || next === "claude-code" || next === "windsurf" || next === "copilot") {
           opts.source = next;
           i++;
         }
