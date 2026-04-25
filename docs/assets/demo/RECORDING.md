@@ -76,6 +76,13 @@ winget install charmbracelet.vhs
 # `npm run demo:render` from inside WSL with the repo mounted.
 ```
 
+If none of the above work for you (no admin rights, no WSL, locked-down
+network), there is a **manual fallback** — see
+[`RECORDING-WINDOWS.md`](RECORDING-WINDOWS.md). It documents recording the
+same 6-frame story with ScreenToGif against the same scenario directory, so
+the rendered GIF is visually consistent with a `vhs` render. Switch back to
+`vhs` as soon as you have access to one of the supported environments.
+
 ### Docker (any OS, no install)
 
 ```bash
