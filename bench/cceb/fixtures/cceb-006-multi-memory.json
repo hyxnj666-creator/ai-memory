@@ -1,0 +1,47 @@
+{
+  "id": "cceb-006-multi-memory",
+  "description": "Single conversation produces three memories: a decision, an architecture choice, and a convention",
+  "difficulty": "hard",
+  "tags": ["multi-memory", "decision", "architecture", "convention"],
+  "conversation": {
+    "title": "Designing the new background-job runner",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We need a proper background-job system. Right now we shell out to cron and write our own retry logic per script. Tell me what we should pick and how to structure it."
+      },
+      {
+        "role": "assistant",
+        "text": "The mature options in the Node ecosystem are BullMQ (Redis-backed), Hatchet (Postgres-backed, durable workflows), and Inngest (managed). Given you already run Redis and want zero new infra, BullMQ is the easiest first jump. For the structure: one queue per job *family* (not per job), keep the worker process distinct from the web process, and route slow jobs to a dedicated queue with its own concurrency limit so they can't starve the fast ones."
+      },
+      {
+        "role": "user",
+        "text": "Okay. Decisions: (1) we'll adopt BullMQ as the standard background-job system across all services. No more ad-hoc cron + scripts. (2) The architecture is a separate `worker` process per service, sharing the same Redis instance as the web process but running on a different deployment with its own scaling rules. (3) Convention: every job handler must be idempotent — same input applied twice produces the same end state. We rely on idempotency for at-least-once retries."
+      },
+      {
+        "role": "assistant",
+        "text": "Three solid calls. On (3): make the idempotency contract explicit by giving every job a `dedupe_key` and writing a small `processed_jobs` table that the handler checks first. That turns 'must be idempotent' from a guideline into something the runtime enforces. Also worth adding to the runbook: jobs that touch external APIs need request-deduplication on the API side too, because BullMQ retries can trigger duplicate side-effects even with an idempotent handler."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-bullmq",
+      "type": "decision",
+      "must_contain": ["BullMQ"],
+      "note": "Pick BullMQ as the standard background-job system."
+    },
+    {
+      "id": "architecture-worker-process",
+      "type": "architecture",
+      "must_contain": ["worker"],
+      "note": "Separate worker process per service, distinct from web process."
+    },
+    {
+      "id": "convention-idempotent-jobs",
+      "type": "convention",
+      "must_contain": ["idempoten"],
+      "note": "Every job handler must be idempotent. 'idempoten' is a stem matching idempotent/idempotency."
+    }
+  ]
+}

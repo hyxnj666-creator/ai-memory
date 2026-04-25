@@ -1,7 +1,7 @@
 {
   "name": "ai-memory-cli",
-  "version": "2.2.0",
-  "description": "AI memory layer for code editors — extract knowledge, MCP server, semantic search (Cursor, Claude Code, Windsurf, VS Code Copilot)",
+  "version": "2.4.0",
+  "description": "Turn editor chat history (Cursor, Claude Code, Windsurf, Copilot) into typed Markdown decisions + AGENTS.md rules — local-first, git-trackable, zero remember() calls.",
   "type": "module",
   "bin": {
     "ai-memory": "dist/index.js"
@@ -19,32 +19,40 @@
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench:cceb": "tsx bench/cceb/run.ts",
+    "bench:cceb:dry": "tsx bench/cceb/run.ts --dry-run",
+    "demo:render": "vhs docs/assets/demo/demo.tape",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
+    "agents-md",
     "ai",
     "memory",
     "cursor",
     "claude-code",
+    "windsurf",
+    "github-copilot",
     "knowledge-extraction",
+    "knowledge-pipeline",
+    "chat-history",
     "conversation-history",
     "developer-tools",
+    "local-first",
     "cli",
     "mcp",
-    "model-context-protocol",
     "mcp-server",
-    "semantic-search",
-    "embeddings"
+    "semantic-search"
   ],
   "author": "Conor Liu",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/conorliu/ai-memory"
+    "url": "https://github.com/hyxnj666-creator/ai-memory"
   },
-  "homepage": "https://github.com/conorliu/ai-memory#readme",
+  "homepage": "https://github.com/hyxnj666-creator/ai-memory#readme",
   "bugs": {
-    "url": "https://github.com/conorliu/ai-memory/issues"
+    "url": "https://github.com/hyxnj666-creator/ai-memory/issues"
   },
   "engines": {
     "node": ">=18"

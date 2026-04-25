@@ -1,14 +1,18 @@
 # Development Guide
 
+> Quick setup + commands. For the canonical project structure, conventions, and
+> architectural patterns, read [AGENTS.md](AGENTS.md) — that file is what AI
+> agents (and humans) should consult before changing code.
+
 ## Prerequisites
 
-- Node.js >= 22
+- Node.js >= 18 (22+ recommended for richer Windsurf conversation titles via `node:sqlite`; 24+ if you want `fetch()` to honour `HTTPS_PROXY` automatically via `NODE_USE_ENV_PROXY=1`)
 - npm
 
 ## Setup
 
 ```bash
-git clone https://github.com/conorliu/ai-memory.git
+git clone https://github.com/hyxnj666-creator/ai-memory.git
 cd ai-memory
 npm install
 ```
@@ -16,84 +20,49 @@ npm install
 ## Scripts
 
 ```bash
-npm run build          # Build with tsup
-npm run typecheck      # TypeScript strict check
-npm test               # Run all tests (vitest)
-npm run test:watch     # Watch mode
-npm run dev -- <args>  # Run CLI in dev mode (tsx)
+npm run build              # Build with tsup → dist/
+npm run typecheck          # TypeScript strict check (noEmit)
+npm test                   # Run all tests (vitest, 431 tests across 25 files)
+npm run test:watch         # Watch mode
+npm run dev -- <args>      # Run CLI in dev mode (tsx, no build)
+npm run bench:cceb:dry     # CCEB pipeline smoke (no LLM, ~1s)
+npm run bench:cceb         # CCEB live run (needs an LLM key + provider config)
+npm run demo:render        # Render hero GIF via vhs (macOS/Linux/WSL/Docker only)
 ```
-
-## Project Structure
-
-```
-src/
-??? index.ts                  # CLI entry point
-??? cli.ts                    # Argument parsing + help text
-??? types.ts                  # Shared type definitions
-??? config.ts                 # .config.json loader
-??? commands/
-?   ??? extract.ts            # Extract memories from conversations
-?   ??? list.ts               # List available conversations
-?   ??? search.ts             # Search through memories
-?   ??? rules.ts              # Export Cursor Rules (.mdc)
-?   ??? resolve.ts            # Mark memories as resolved/active
-?   ??? summary.ts            # Generate project summary
-?   ??? context.ts            # Generate continuation prompt
-?   ??? init.ts               # Initialize config
-?   ??? dashboard.ts          # Dashboard web UI command
-??? dashboard/
-?   ??? server.ts             # HTTP API server (node:http)
-?   ??? html.ts               # Embedded SPA template (Tailwind + D3.js)
-??? sources/
-?   ??? cursor.ts             # Cursor transcript parser
-?   ??? claude-code.ts        # Claude Code session parser
-?   ??? windsurf.ts           # Windsurf (SQLite chat data)
-?   ??? copilot.ts            # VS Code Copilot Chat (JSON sessions)
-?   ??? detector.ts           # Auto-detect available sources
-??? extractor/
-?   ??? ai-extractor.ts       # AI extraction core (chunking, quality filter)
-?   ??? llm.ts                # LLM API client (concurrency, retry, timeout)
-?   ??? prompts.ts            # Extraction/summary/context prompts
-??? store/
-?   ??? memory-store.ts       # Memory file read/write (Markdown)
-?   ??? state.ts              # Incremental extraction state
-??? output/
-?   ??? terminal.ts           # Terminal colors and formatting
-??? utils/
-    ??? author.ts             # Author resolution (CLI > config > git > OS)
-```
-
-## Architecture
-
-```
-Conversation Sources          Extractor                    Storage
-(Cursor, Claude Code)         (LLM + post-processing)      (Markdown files)
-
-  Source.listConversations()    splitIntoChunks()            writeConversationMemories()
-  Source.loadConversation()     callLLM() per chunk          readAllMemories()
-                                deduplicateMemories()
-                                qualityFilter()
-```
-
-## Key Design Decisions
-
-- **Minimal runtime dependencies** ? only MCP SDK + zod
-- **Multi-source architecture** ? Source interface abstraction for 4 editors (Cursor, Claude Code, Windsurf, VS Code Copilot)
-- **Chunked extraction** ? conversations split at turn boundaries, ~5k tokens/chunk
-- **Quality filtering** ? short content + title-content similarity check
-- **Team-aware storage** ? per-author subdirectories, no merge conflicts
-- **i18n labels** ? memory files support zh/en metadata labels
 
 ## Testing
 
 ```bash
 npm test                              # all tests
-npx vitest run src/__tests__/cli      # specific file
+npx vitest run src/__tests__/cli      # single file
 npx vitest --watch                    # watch mode
 ```
 
-Tests cover: CLI parsing, source parsers, memory store, state management, LLM config, prompts, deduplication, author resolution.
+Test fixtures and patterns are documented under "Tests" in
+[AGENTS.md](AGENTS.md) — including the canonical IO-test pattern
+(`mkdtemp(tmpdir())` + `chdir`, see `mcp-config-writer.test.ts`,
+`agents-md-writer.test.ts`, `log-reader.test.ts`).
+
+## Project structure & conventions
+
+Single source of truth: **[AGENTS.md](AGENTS.md)**. It documents:
+
+- Full `src/`, `bench/`, and `docs/assets/demo/` tree (kept in sync per release)
+- ESM / TypeScript-strict / minimal-runtime-deps invariants
+- Canonical patterns (file-merge, external-process, doctor, hero GIF generation)
+- "Critical rules — do not break" (CLI surface, memory file format, bundle schema, state file)
+- Where to look for context (ROADMAP, CHANGELOG, ADRs, RFCs)
+
+Decisions made along the way live under [`docs/decisions/`](docs/decisions/) (ADRs, newest-first).
+
+## Benchmarks
+
+The Cursor Conversation Extraction Benchmark (CCEB) lives at `bench/cceb/`.
+Read `bench/cceb/README.md` for methodology and fixture-authoring rules. The
+latest published baseline is in [`docs/benchmarks/cceb-baseline.md`](docs/benchmarks/cceb-baseline.md).
 
 ## Publishing
 
-See [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).
+See [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). The `prepublishOnly` script
+in `package.json` will re-run `typecheck → test → build` automatically before
+`npm publish`, so you can't ship a stale `dist/` by accident.

@@ -2,9 +2,13 @@ import { writeFile, readFile, mkdir, appendFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { CliOptions, AiMemoryConfig } from "../types.js";
 import { DEFAULT_CONFIG } from "../types.js";
-import { detectSources } from "../sources/detector.js";
+import { detectSources, sourceLabel } from "../sources/detector.js";
 import { printBanner } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
+import {
+  writeProjectMcpConfigs,
+  type WriteResult,
+} from "../mcp/config-writer.js";
 
 const CONFIG_PATH = ".ai-memory/.config.json";
 const GITIGNORE_ENTRIES = [".ai-memory/.state.json", ".ai-memory/.embeddings.json"];
@@ -51,14 +55,10 @@ export async function runInit(opts: CliOptions): Promise<number> {
 
   if (!opts.json) {
     for (const s of available) {
-      console.log(
-        `   [+] ${s.type === "cursor" ? "Cursor" : "Claude Code"} detected`
-      );
+      console.log(`   [+] ${sourceLabel(s.type)} detected`);
     }
     for (const t of unavailable) {
-      console.log(
-        `   [ ] ${t === "cursor" ? "Cursor" : "Claude Code"} not found`
-      );
+      console.log(`   [ ] ${sourceLabel(t)} not found`);
     }
   }
 
@@ -104,17 +104,38 @@ export async function runInit(opts: CliOptions): Promise<number> {
     }
   }
 
-  // 5. Next steps
+  // 5. MCP configs (opt-in via --with-mcp)
+  let mcpResults: WriteResult[] | undefined;
+  if (opts.withMcp) {
+    mcpResults = await writeProjectMcpConfigs();
+    if (!opts.json) {
+      console.log(`\nMCP configuration:`);
+      for (const r of mcpResults) {
+        console.log(`   ${formatMcpStatus(r)}`);
+      }
+      console.log(
+        `   [i] For Claude Desktop (global), copy the JSON snippet from README.md "MCP Server"`
+      );
+      console.log(
+        `       to your OS-specific path (e.g. ~/Library/Application Support/Claude/claude_desktop_config.json).`
+      );
+    }
+  }
+
+  // 6. Next steps
   if (!opts.json) {
     console.log(`
 Next steps:
   1. Set your API key:
      export AI_REVIEW_API_KEY=sk-...
 
-  2. Extract memories from your conversations:
+  2. Verify your setup:
+     npx ai-memory-cli doctor
+
+  3. Extract memories from your conversations:
      npx ai-memory-cli extract
 
-  3. Commit your memories:
+  4. Commit your memories:
      git add .ai-memory/ && git commit -m "chore: add ai-memory knowledge base"
 `);
   } else {
@@ -123,9 +144,32 @@ Next steps:
         detected: available.map((s) => s.type),
         configPath: CONFIG_PATH,
         gitignoreUpdated: updated,
+        mcp: mcpResults?.map((r) => ({
+          label: r.target.label,
+          path: r.target.configPath,
+          action: r.action,
+          wrote: r.wrote,
+          reason: r.reason,
+        })),
       })
     );
   }
 
   return 0;
+}
+
+function formatMcpStatus(r: WriteResult): string {
+  const path = r.target.configPath;
+  switch (r.action) {
+    case "created":
+      return `[+] ${r.target.label} (${path}): created`;
+    case "updated":
+      return `[+] ${r.target.label} (${path}): added ai-memory entry`;
+    case "already-registered":
+      return `    ${r.target.label} (${path}): ai-memory already registered`;
+    case "conflict":
+      return `[!] ${r.target.label} (${path}): skipped — ${r.reason ?? "existing entry differs"}`;
+    case "invalid":
+      return `[!] ${r.target.label} (${path}): skipped — ${r.reason ?? "invalid JSON"}`;
+  }
 }

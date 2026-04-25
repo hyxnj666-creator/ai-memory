@@ -4,8 +4,10 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.4.x   | Yes       |
-| < 1.4   | No        |
+| 2.x     | Yes       |
+| 1.x     | No (EOL)  |
+
+Security fixes are backported to the latest minor release only.
 
 ## Reporting a Vulnerability
 
@@ -57,4 +59,8 @@ To mitigate:
 
 ## Dependencies
 
-ai-memory has **zero runtime dependencies** (v1.x). This minimizes supply chain attack surface. All functionality uses Node.js built-in modules.
+ai-memory v2 has two runtime dependencies, both well-audited:
+- `@modelcontextprotocol/sdk` — official MCP SDK for the `serve` command
+- `zod` — runtime schema validation for bundle import
+
+Prior to v2.0 the project had zero runtime dependencies. If you need the zero-deps posture for CLI-only usage, `ai-memory-cli@1.4.x` is still installable on npm.

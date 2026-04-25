@@ -4,6 +4,13 @@ import { readAllMemories } from "../store/memory-store.js";
 import type { ExtractedMemory, MemoryType } from "../types.js";
 import { getDashboardHtml } from "./html.js";
 import { c, printError } from "../output/terminal.js";
+import {
+  isVagueContent,
+  specificityScore,
+  shingles,
+  jaccardSimilarity,
+  containmentSimilarity,
+} from "../extractor/ai-extractor.js";
 
 interface StatsResponse {
   total: number;
@@ -204,6 +211,180 @@ function buildGraph(memories: ExtractedMemory[]): { nodes: GraphNode[]; links: G
   return { nodes, links };
 }
 
+interface QualityResponse {
+  total: number;
+  healthy: number;
+  flagged: number;
+  flaggedPct: number;
+  vague: number;
+  duplicates: number;
+  subsumed: number;
+  specHistogram: Array<{ score: number; count: number }>;
+  vagueSamples: Array<{ type: string; title: string; content: string; filePath?: string }>;
+  duplicatePairs: Array<{
+    type: string;
+    titleA: string;
+    titleB: string;
+    jaccard: number;
+    containment: number;
+    reason: "duplicate" | "subsumed";
+  }>;
+}
+
+const SHINGLE_DEDUP_THRESHOLD = 0.55;
+const CONTAINMENT_THRESHOLD = 0.75;
+
+interface ConversationSummary {
+  sourceId: string;
+  sourceTitle: string;
+  sourceType: string;
+  author?: string;
+  count: number;
+  types: Record<string, number>;
+  firstDate: string;
+  lastDate: string;
+  memories: Array<{
+    id: string;
+    type: string;
+    title: string;
+    date: string;
+    status: string;
+  }>;
+}
+
+export function buildConversations(memories: ExtractedMemory[]): ConversationSummary[] {
+  const bySource = new Map<string, ConversationSummary>();
+
+  for (const m of memories) {
+    if (!m.sourceId) continue;
+    let entry = bySource.get(m.sourceId);
+    if (!entry) {
+      entry = {
+        sourceId: m.sourceId,
+        sourceTitle: m.sourceTitle || "(untitled)",
+        sourceType: m.sourceType,
+        author: m.author,
+        count: 0,
+        types: {},
+        firstDate: m.date || "",
+        lastDate: m.date || "",
+        memories: [],
+      };
+      bySource.set(m.sourceId, entry);
+    }
+    entry.count++;
+    entry.types[m.type] = (entry.types[m.type] || 0) + 1;
+    // Defensive: treat "" as "unknown" so the first real date always wins.
+    if (m.date) {
+      if (!entry.firstDate || m.date < entry.firstDate) entry.firstDate = m.date;
+      if (m.date > entry.lastDate) entry.lastDate = m.date;
+    }
+    entry.memories.push({
+      id: memoryId(m),
+      type: m.type,
+      title: m.title,
+      date: m.date || "",
+      status: m.status ?? "active",
+    });
+  }
+
+  // Sort each conversation's memories by date desc, then conversations by lastDate desc
+  for (const entry of bySource.values()) {
+    entry.memories.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }
+  return [...bySource.values()].sort((a, b) =>
+    (b.lastDate || "").localeCompare(a.lastDate || "")
+  );
+}
+
+function buildQualityReport(memories: ExtractedMemory[]): QualityResponse {
+  let vague = 0;
+  const vagueSamples: QualityResponse["vagueSamples"] = [];
+  const specCounts = new Map<number, number>();
+  const flaggedPaths = new Set<string | undefined>();
+
+  for (const m of memories) {
+    const score = specificityScore(m.content);
+    specCounts.set(score, (specCounts.get(score) ?? 0) + 1);
+
+    if (isVagueContent(m.content, m.impact)) {
+      vague++;
+      flaggedPaths.add(m.filePath);
+      if (vagueSamples.length < 20) {
+        vagueSamples.push({
+          type: m.type,
+          title: m.title,
+          content: m.content.slice(0, 180),
+          filePath: m.filePath,
+        });
+      }
+    }
+  }
+
+  // Duplicate / subsumed pairs within each type
+  const byType = new Map<string, ExtractedMemory[]>();
+  for (const m of memories) {
+    if (!byType.has(m.type)) byType.set(m.type, []);
+    byType.get(m.type)!.push(m);
+  }
+
+  let duplicates = 0;
+  let subsumed = 0;
+  const duplicatePairs: QualityResponse["duplicatePairs"] = [];
+
+  for (const [type, ms] of byType) {
+    const shingleCache = ms.map((m) => shingles(m.content));
+    for (let i = 0; i < ms.length; i++) {
+      for (let j = i + 1; j < ms.length; j++) {
+        const jac = jaccardSimilarity(shingleCache[i], shingleCache[j]);
+        const [smaller, larger] = shingleCache[i].size <= shingleCache[j].size
+          ? [shingleCache[i], shingleCache[j]]
+          : [shingleCache[j], shingleCache[i]];
+        const cont = containmentSimilarity(smaller, larger);
+
+        let reason: "duplicate" | "subsumed" | null = null;
+        if (jac > SHINGLE_DEDUP_THRESHOLD) { duplicates++; reason = "duplicate"; }
+        else if (cont > CONTAINMENT_THRESHOLD) { subsumed++; reason = "subsumed"; }
+
+        if (reason) {
+          flaggedPaths.add(ms[i].filePath);
+          flaggedPaths.add(ms[j].filePath);
+          if (duplicatePairs.length < 30) {
+            duplicatePairs.push({
+              type,
+              titleA: ms[i].title,
+              titleB: ms[j].title,
+              jaccard: Math.round(jac * 100) / 100,
+              containment: Math.round(cont * 100) / 100,
+              reason,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const specHistogram = [...specCounts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([score, count]) => ({ score, count }));
+
+  const flagged = flaggedPaths.size;
+  const total = memories.length;
+
+  return {
+    total,
+    healthy: total - flagged,
+    flagged,
+    flaggedPct: total > 0 ? Math.round((flagged / total) * 100) : 0,
+    vague,
+    duplicates,
+    subsumed,
+    specHistogram,
+    vagueSamples,
+    duplicatePairs,
+  };
+}
+
 function buildObsidianExport(memories: ExtractedMemory[]): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = [];
 
@@ -281,6 +462,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
       case "/api/graph":
         json(res, buildGraph(memories));
+        return;
+
+      case "/api/quality":
+        json(res, buildQualityReport(memories));
+        return;
+
+      case "/api/conversations":
+        json(res, buildConversations(memories));
         return;
 
       case "/api/export/json":

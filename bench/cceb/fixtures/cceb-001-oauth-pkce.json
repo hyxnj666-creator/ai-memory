@@ -1,0 +1,36 @@
+{
+  "id": "cceb-001-oauth-pkce",
+  "description": "Clear-cut decision: switch SPA auth from OAuth implicit flow to PKCE",
+  "difficulty": "easy",
+  "tags": ["decision", "single-memory"],
+  "conversation": {
+    "title": "Auth flow review for the customer portal SPA",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We're auditing the auth flow for our customer portal SPA. It currently uses OAuth 2.0 implicit flow with the access token in the URL fragment. Security review pushed back. Should we move to PKCE?"
+      },
+      {
+        "role": "assistant",
+        "text": "Yes — implicit flow has been deprecated by the OAuth working group since 2019 (RFC 8252) precisely because the access token ends up in the URL, which leaks via Referer headers, browser history, and proxy logs. PKCE (Proof Key for Code Exchange) replaces it with the auth code flow plus a per-request code_verifier/code_challenge pair. The library you're already using (`oauth4webapi`) supports PKCE out of the box."
+      },
+      {
+        "role": "user",
+        "text": "Okay, let's commit to that. We'll switch the SPA to OAuth 2.0 authorization code flow with PKCE, retire the implicit-flow client config, and require HTTPS-only redirect URIs. I'll create a follow-up to deprecate the old client_id by end of quarter."
+      },
+      {
+        "role": "assistant",
+        "text": "Sounds good. The migration is mostly a few lines of code in your auth provider — replace `response_type=token` with `response_type=code` + the PKCE params, and add a token-exchange step. The biggest behaviour change for users will be one additional round-trip on first login. I'd suggest doing it behind a feature flag so you can roll back if anything breaks in production."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-pkce",
+      "type": "decision",
+      "must_contain": ["PKCE"],
+      "must_not_contain": ["implicit flow is fine"],
+      "note": "The headline decision. Title or content must mention PKCE."
+    }
+  ]
+}

@@ -209,17 +209,26 @@ export async function runExtract(opts: CliOptions): Promise<number> {
 
   const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate + totalQuality.filteredVague + totalQuality.filteredExistingDup;
   if (opts.json) {
-    console.log(JSON.stringify({ total: totalMemories, breakdown, qualityFiltered: qualityDropped }));
+    console.log(JSON.stringify({
+      total: totalMemories,
+      breakdown,
+      qualityFiltered: qualityDropped,
+      qualityStats: totalQuality,
+    }));
   } else {
     printSummary(totalMemories, outputDir, breakdown);
     if (qualityDropped > 0) {
+      const retentionPct = totalQuality.total > 0
+        ? Math.round((totalQuality.kept / totalQuality.total) * 100)
+        : 100;
       const parts = [
-        totalQuality.filteredShort > 0 ? `${totalQuality.filteredShort} short` : "",
+        totalQuality.filteredShort > 0 ? `${totalQuality.filteredShort} too short` : "",
         totalQuality.filteredDuplicate > 0 ? `${totalQuality.filteredDuplicate} title≈content` : "",
-        totalQuality.filteredVague > 0 ? `${totalQuality.filteredVague} vague` : "",
-        totalQuality.filteredExistingDup > 0 ? `${totalQuality.filteredExistingDup} existing dup` : "",
+        totalQuality.filteredVague > 0 ? `${totalQuality.filteredVague} vague content` : "",
+        totalQuality.filteredExistingDup > 0 ? `${totalQuality.filteredExistingDup} duplicate of existing` : "",
       ].filter(Boolean).join(", ");
-      console.log(`   (${qualityDropped} low-quality filtered: ${parts})`);
+      console.log(`\nQuality filter: ${totalQuality.kept}/${totalQuality.total} kept (${retentionPct}%)`);
+      console.log(`  - dropped ${qualityDropped}: ${parts}`);
     }
   }
 

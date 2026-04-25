@@ -1,0 +1,35 @@
+{
+  "id": "cceb-007-cjk-decision",
+  "description": "CJK-language decision: pick pnpm over npm as the standard package manager",
+  "difficulty": "medium",
+  "tags": ["decision", "cjk", "single-memory"],
+  "conversation": {
+    "title": "前端工程化方案 — 包管理器选型",
+    "turns": [
+      {
+        "role": "user",
+        "text": "我们 monorepo 现在用的还是 npm，install 一次要 4 分钟，CI 缓存命中率还低。yarn classic 已经 EOL 了，看下一步切什么比较好？"
+      },
+      {
+        "role": "assistant",
+        "text": "对 monorepo 来说，pnpm 是当前最合适的选择：硬链接 + 内容寻址存储（CAS）让 install 速度比 npm 快 2-3 倍，磁盘占用降低 60%+；workspace 协议原生支持，比 npm 的 workspaces 更严格地隔离 phantom dependencies；filter 语法（--filter web、--filter ./apps/*）让 CI 矩阵任务非常自然。yarn berry 也是技术上不差的方案，但 PnP 模式跟生态兼容性问题多，如果不上 PnP 那就等于一个慢一点的 pnpm。"
+      },
+      {
+        "role": "user",
+        "text": "好，那就这么定了：整个 monorepo 切到 pnpm，作为公司前端项目的标准包管理器。下周开 PR 改 CI 和 lockfile，旧的 package-lock.json 删掉，新人 onboarding 文档也同步更新。"
+      },
+      {
+        "role": "assistant",
+        "text": "切换的时候注意几点：（1）`.npmrc` 里加 `auto-install-peers=true` 保留 npm 行为，否则有些 lib 会突然报缺 peer。（2）CI 里用 `pnpm install --frozen-lockfile` 替代 `npm ci`。（3）Docker 镜像层缓存策略要重写，把 `pnpm-lock.yaml` 单独 COPY 到一层。"
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-pnpm",
+      "type": "decision",
+      "must_contain": ["pnpm"],
+      "note": "Decision is to adopt pnpm. Both the user and assistant repeat the keyword in latin script."
+    }
+  ]
+}

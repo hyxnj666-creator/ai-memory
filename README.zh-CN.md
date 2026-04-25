@@ -1,36 +1,66 @@
-﻿# ai-memory
+# ai-memory
 
 [![npm version](https://img.shields.io/npm/v/ai-memory-cli.svg)](https://www.npmjs.com/package/ai-memory-cli)
-[![CI](https://github.com/conorliu/ai-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/conorliu/ai-memory/actions/workflows/ci.yml)
+[![CI](https://github.com/hyxnj666-creator/ai-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/hyxnj666-creator/ai-memory/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> 把 AI 聊天记录变成可搜索、可追踪的项目知识库。
+> 把 AI 编辑器的聊天记录变成结构化的 Markdown 决策 + `AGENTS.md` 规则文件 —— 本地优先、git 可追踪、零 `.remember()` 调用。
+
+<!--
+  Hero GIF slot. 用 `npm run demo:render` 渲染。
+  渲染产物在 docs/assets/demo/demo.gif。GIF 出来后把这段注释替换成：
+    ![ai-memory 30 秒演示](docs/assets/demo/demo.gif)
+  完整流程见 docs/assets/demo/RECORDING.md。
+-->
 
 ```bash
-npx ai-memory-cli extract          # 自动发现对话、提取知识
-npx ai-memory-cli search "OAuth"   # 即时搜索任意记忆
-npx ai-memory-cli rules            # 从约定自动生成 Cursor Rules
-npx ai-memory-cli context --copy   # 复制上下文，无缝续接任意会话
+npx ai-memory-cli extract                     # 读你编辑器里的聊天历史 → 结构化 Markdown
+npx ai-memory-cli rules --target agents-md    # → AGENTS.md（Cursor / Claude / Windsurf / Copilot 都读）
+npx ai-memory-cli recall "OAuth"              # 看任一决策的完整 git 演化轨迹
+npx ai-memory-cli context --copy              # 把上下文复制到剪贴板，新会话无缝续接
 ```
 
-从 AI 编辑器对话历史（Cursor、Claude Code、Windsurf、VS Code Copilot）中提取结构化知识，保存为可 git 跟踪的 Markdown 文件。不再让技术决策、架构设计和 TODO 埋没在聊天记录里。
+别家"AI memory"工具的起点是一个 `remember()` API，要求你在自己的代码里加埋点。**`ai-memory` 直接读你编辑器里已有的聊天记录** —— Cursor、Claude Code、Windsurf、Copilot Chat —— 把它转成结构化、git 可追踪的 Markdown，再让所有 AI 编辑器通过 `AGENTS.md` 读回去。**没有新 API 要学，没有运行时记忆服务要维持。**
+
+**本地优先**。对话从不离开你的机器；唯一的对外网络请求是去你自己配置的 LLM 提供商做提取。需要完全离线？用 Ollama / LM Studio。
 
 > **[English README](README.md)**
 
 ---
 
-## 为什么用 ai-memory？
+## 只有 ai-memory 做的四件事
 
-每天在 Cursor 或 Claude Code 开发时，你会做出无数决策。这些决策活在聊天记录里，换台电脑、开个新对话、来个新队友就丢了。**ai-memory 把短暂的对话变成持久、可搜索的知识库。**
+前三件是结构性差异，第四件是别家不愿做的工程投入。
 
-| 你得到的                    | 怎么实现的                                                           |
-| --------------------------- | -------------------------------------------------------------------- |
-| **结构化知识**        | AI 提取决策、架构、约定、TODO、问题                                  |
-| **Git 可追踪**        | 纯 Markdown 文件，和代码一起提交                                     |
-| **Token 节省**        | `context` 命令将上千轮对话压缩为精准 prompt — 通常节省 90%+ token |
-| **团队感知**          | 按作者分目录，无合并冲突                                             |
-| **Cursor Rules 导出** | 自动从约定生成 `.cursor/rules/` — 其他工具没有这个                |
-| **零配置**            | `npx` 开箱即用                                                     |
+1. **零 `.remember()` 埋点**。我们读你**已经写出来**的东西 —— Cursor / Claude Code / Windsurf / Copilot Chat 的对话记录本来就在硬盘上。没有 SDK 要 import，没有 runtime memory 进程要常驻。对比 mem0 / Letta / Zep / cortexmem —— 它们都要求你在应用代码里手动调 `client.add(...)`。
+
+2. **原生输出 `AGENTS.md`**。`ai-memory rules --target agents-md` 直接生成 Cursor、Claude Code、Windsurf、Copilot 都读的跨工具标准规则文件。**幂等合并**：只动 `<!-- ai-memory:managed-section start --> ... end -->` 之间的内容，你手写的部分按字节保留。`AGENTS.md` 已经被 60K+ 仓库采纳、归 Linux Foundation 治理 —— 别家项目都得手写，我们直接从你的聊天记录生成。
+
+3. **纯 Markdown 在 git 里 —— 没有数据库**。`.ai-memory/` 就是真相之源：你能 `git diff`、能 code review、能开分支、能 revert 的 Markdown 文件。别家"git 可追踪"的 memory 工具版本控制的是它们*内部存储的快照*；我们直接把人类可读的文件格式当作存储层，让 git 接管一切。跨设备同步就是 `git pull`。
+
+4. **基于 git history 的时光机回溯**。`ai-memory recall <query>` 展示每条记忆完整的 commit 演化历史：4 月 1 号这个决策长什么样、4 月 15 号又改成什么样、谁改的。其他 memory 工具只返回"最新版本"，被覆盖掉的旧版默默消失。零新增运行时依赖 —— `recall` 直接走 `node:child_process.execFile` 调你系统已有的 `git`，10 秒超时保护。
+
+## 我们量化自己
+
+[CCEB v1 — Cursor Conversation Extraction Benchmark](docs/benchmarks/cceb-baseline.md)，`gpt-4o-mini`，9 条手心 fixture，2026-04-25：
+
+| 指标 | 数值 |
+|---|---|
+| 整体 F1 | **56.0%**（precision 43.8% / recall 77.8%） |
+| 噪声 fixture 处理（闲聊 + 悬而未决问题） | **100%** —— 不会无中生有 |
+| 总耗时 | 70.5 秒 |
+| 花费 | ≈ $0.005 |
+
+整体形态 —— **召回高、精度被 over-extraction（一个决策被拆成 2-4 条独立记忆）拉低** —— 文档里完整公布了 sample misses、sample false positives，以及 v2.5 要做的具体 prompt 调优方向。**比起跑一个会随上游模型变动而漂移的漂亮数字，我们宁可诚实地公布 56%**。
+
+为什么自己造 benchmark？LongMemEval、LoCoMo 等已有 benchmark 测的是 runtime *recall*（agent 还记不记得某个事实）；我们测的是 *extraction*（聊天记录里能不能提取出对的结构化 artifact）。不同层、不同问题。详见[品类定位 ADR](docs/decisions/2026-04-25-category-positioning.md)。
+
+### 其他能力
+
+- **Token 节省** —— `context` 把上千轮对话压缩成精准 prompt（vs. 直接粘原始历史，通常省 90%+ token）。
+- **团队感知** —— `.ai-memory/{author}/` 按作者分目录，两个人在同一项目同时提交记忆不会冲突。
+- **跨设备搬运** —— `export` / `import` 把整库往返成版本化的 JSON bundle。
+- **零配置** —— `npx ai-memory-cli init --with-mcp` 一行搞定。
 
 ---
 
@@ -39,6 +69,12 @@ npx ai-memory-cli context --copy   # 复制上下文，无缝续接任意会话
 ```bash
 # 设置 API key（任意 OpenAI 兼容提供商）
 export AI_REVIEW_API_KEY=sk-...    # 或 OPENAI_API_KEY
+
+# 初始化项目（可选：自动把 ai-memory 注册为 MCP server）
+npx ai-memory-cli init --with-mcp
+
+# 一键体检 — 检查编辑器、API key、存储、MCP 配置
+npx ai-memory-cli doctor
 
 # 提取所有对话中的知识
 npx ai-memory-cli extract
@@ -59,6 +95,18 @@ git add .ai-memory/ && git commit -m "chore: 添加 AI 对话知识库"
 ---
 
 ## 命令
+
+### `doctor` — 一键健康检查
+
+安装后先跑这个。它会诊断六个最常见的配置问题，并告诉你每一项怎么修。
+
+```bash
+npx ai-memory-cli doctor                 # 人类可读报告
+npx ai-memory-cli doctor --no-llm-check  # 跳过联网 API 测试（离线 / CI 场景）
+npx ai-memory-cli doctor --json          # 结构化输出（便于脚本处理 / 贴到 issue 里）
+```
+
+检查项：Node 版本、检测到的编辑器及对话数（Cursor / Claude Code / Windsurf / Copilot）、LLM 提供商 + 实时连通性探测、记忆存储与作者解析、embeddings 新鲜度、MCP 配置注册情况。全部通过退出码为 `0`，有任何 fail 退出码为 `1`。
 
 ### `list` — 浏览对话列表
 
@@ -102,17 +150,61 @@ npx ai-memory-cli search "配置" --json              # JSON 输出
 
 结果按相关度排序（标题匹配 > 内容 > 上下文），关键词高亮显示。
 
-### `rules` — 导出 Cursor Rules
+### `recall` — 用 git 历史回溯一条记忆
 
-从提取的约定和决策自动生成 `.mdc` 文件，Cursor 会自动应用到所有 AI 回复：
+别家"memory"工具都把记忆压平成"最新版本"——每一次更新都默默覆盖之前的版
+本。我们因为 `.ai-memory/` 是 git 里的纯 Markdown，*完整演化轨迹*本来就在磁盘
+上；`recall` 把它升级成一等命令。
 
 ```bash
-npx ai-memory-cli rules                            # 生成 .cursor/rules/ai-memory-conventions.mdc
-npx ai-memory-cli rules --output my-rules.mdc      # 自定义输出路径
+npx ai-memory-cli recall "OAuth"                   # 看这条 OAuth 决策怎么演化的
+npx ai-memory-cli recall "OAuth" --include-resolved # 包含被替代/已归档的版本
+npx ai-memory-cli recall "API" --type decision      # 按类型过滤
+npx ai-memory-cli recall "auth" --all-authors       # 跨整个团队搜
+npx ai-memory-cli recall "OAuth" --json             # 结构化输出（每条记忆 + 其 commit 列表）
+```
+
+输出形如：
+
+```
+Recall: "OAuth" — 1 memory, 4 commits of lineage
+
+[+] CURRENT  Use OAuth 2.0 PKCE for SPA  @conor (2026-04-20)
+    .ai-memory/conor/decisions/2026-04-20-use-oauth-pkce.md
+    History (4 commits):
+      a1b2c3d  2026-04-20  conor   ~ Tighten OAuth PKCE: require HTTPS-only token endpoint
+      e4f5g6h  2026-04-15  conor   ~ Switch from implicit flow to PKCE
+      i7j8k9l  2026-03-20  conor   + Add OAuth library notes
+    > git log --follow .ai-memory/conor/decisions/2026-04-20-use-oauth-pkce.md  for full diffs
+```
+
+- 用 `git log --follow`，所以 `.ai-memory/` 内的文件重命名能透明追踪。
+- 每行展示：短 SHA、ISO 日期、作者、状态码（`+` 新增，`~` 修改，`-` 删除，
+  `R` 重命名）、commit 标题。
+- **软降级** — 不在 git 仓库里、或还没把 `.ai-memory/` 提交时，recall 仍然返
+  回匹配的记忆并给出提示。任何场景下都不会比 `search` 差。
+- 没有新增运行时依赖 — 直接用系统现有 `git`，`node:child_process.execFile`，
+  10 秒超时保护。
+
+### `rules` — 导出 Cursor Rules **和** AGENTS.md
+
+把约定/决策同时写到 Cursor 原生规则文件和跨编辑器通用的 `AGENTS.md`：
+
+```bash
+npx ai-memory-cli rules                            # 默认 .cursor/rules/ai-memory-conventions.mdc
+npx ai-memory-cli rules --target agents-md         # AGENTS.md（Codex / Cursor / Windsurf / Copilot / Amp 都读）
+npx ai-memory-cli rules --target both              # 两个文件都按默认路径写
+npx ai-memory-cli rules --output my-rules.mdc      # 单 target 时自定义输出
 npx ai-memory-cli rules --all-authors              # 包含团队所有人的约定
 ```
 
-这就是 **对话到规则的闭环** — 从聊天历史提取约定，自动生成编辑器规则。其他工具没有这个能力。
+`--target agents-md` 采用 **幂等合并**：只更新 `<!-- ai-memory:managed-section
+start --> ... end -->` 之间的内容，文件其它手写部分原样保留；同样输入连续两次
+执行不会改文件（输出 `already-up-to-date`）；如果 marker 缺失或重复，会报告
+冲突并拒绝写入，永远不会破坏你已有的 `AGENTS.md`。
+
+这就是 **对话到规则的闭环** — 从聊天历史提取约定，自动生成所有 AI 编辑器都
+能读的规则文件。其他工具没有这个能力。
 
 ### `resolve` — 标记记忆为已归档
 
@@ -155,10 +247,13 @@ npx ai-memory-cli context --include-resolved       # 包含已归档的记忆
 ### `init` — 初始化配置
 
 ```bash
-npx ai-memory-cli init
+npx ai-memory-cli init                             # 检测编辑器、创建配置
+npx ai-memory-cli init --with-mcp                  # 同时把 ai-memory 注册为 MCP server
 ```
 
 自动检测编辑器，创建 `.ai-memory/.config.json`，并将 `.state.json` 加入 `.gitignore`。
+
+加上 `--with-mcp` 时，会生成/合并 `.cursor/mcp.json` 与 `.windsurf/mcp.json`，编辑器重启后即可使用 MCP server，不用再手动拷贝 README 里的 JSON 片段。**幂等安全**：已注册的条目原样保留；如果你自定义过 `mcpServers["ai-memory"]`，会被视作冲突并跳过，不会覆盖你的配置。Claude Desktop 的全局配置路径随系统而异，请参考下一节的 JSON 片段自行拷贝。
 
 ### `dashboard` — 可视化面板
 
@@ -534,4 +629,4 @@ git commit && git push
 
 ## License
 
-MIT — [Conor Liu](https://github.com/conorliu)
+MIT — [Conor Liu](https://github.com/hyxnj666-creator)

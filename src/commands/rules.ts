@@ -1,12 +1,30 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CliOptions, ExtractedMemory } from "../types.js";
 import { readAllMemories } from "../store/memory-store.js";
 import { loadConfig } from "../config.js";
 import { resolveAuthor } from "../utils/author.js";
 import { printBanner, printError } from "../output/terminal.js";
+import {
+  AGENTS_MD_DEFAULT_PATH,
+  writeAgentsMd,
+  type WriteAgentsMdResult,
+} from "../rules/agents-md-writer.js";
 
-const DEFAULT_OUTPUT = ".cursor/rules/ai-memory-conventions.mdc";
+const CURSOR_RULES_DEFAULT = ".cursor/rules/ai-memory-conventions.mdc";
+
+type Target = "cursor-rules" | "agents-md" | "both";
+
+interface TargetResult {
+  target: "cursor-rules" | "agents-md";
+  outputPath: string;
+  /** "created" | "updated" | "appended" | "already-up-to-date" | "conflict" */
+  action: string;
+  wrote: boolean;
+  conventions: number;
+  decisions: number;
+  reason?: string;
+}
 
 function memoryToRule(m: ExtractedMemory): string {
   const lines: string[] = [];
@@ -18,7 +36,10 @@ function memoryToRule(m: ExtractedMemory): string {
   return lines.join("\n");
 }
 
-function buildRulesFile(memories: ExtractedMemory[], language: "zh" | "en"): string {
+function buildCursorRulesFile(
+  memories: ExtractedMemory[],
+  language: "zh" | "en"
+): string {
   const isZh = language === "zh";
   const lines: string[] = [];
 
@@ -64,6 +85,85 @@ function buildRulesFile(memories: ExtractedMemory[], language: "zh" | "en"): str
   return lines.join("\n");
 }
 
+async function safeReadFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+async function runCursorRulesTarget(
+  memories: ExtractedMemory[],
+  language: "zh" | "en",
+  outputPath: string
+): Promise<TargetResult> {
+  const conventions = memories.filter((m) => m.type === "convention").length;
+  const decisions = memories.filter((m) => m.type === "decision").length;
+  const next = buildCursorRulesFile(memories, language);
+
+  const existing = await safeReadFile(outputPath);
+  if (existing !== null && existing === next) {
+    return {
+      target: "cursor-rules",
+      outputPath,
+      action: "already-up-to-date",
+      wrote: false,
+      conventions,
+      decisions,
+    };
+  }
+
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, next, "utf-8");
+  return {
+    target: "cursor-rules",
+    outputPath,
+    action: existing === null ? "created" : "updated",
+    wrote: true,
+    conventions,
+    decisions,
+  };
+}
+
+async function runAgentsMdTarget(
+  memories: ExtractedMemory[],
+  language: "zh" | "en",
+  outputPath: string
+): Promise<TargetResult> {
+  const r: WriteAgentsMdResult = await writeAgentsMd(memories, {
+    language,
+    outputPath,
+  });
+  return {
+    target: "agents-md",
+    outputPath: r.outputPath,
+    action: r.action,
+    wrote: r.wrote,
+    conventions: r.conventions,
+    decisions: r.decisions,
+    reason: r.reason,
+  };
+}
+
+function formatTargetLine(r: TargetResult): string {
+  const label = r.target === "cursor-rules" ? "Cursor Rules" : "AGENTS.md";
+  switch (r.action) {
+    case "created":
+      return `[+] ${label} created -> ${r.outputPath}`;
+    case "updated":
+      return `[+] ${label} updated -> ${r.outputPath}`;
+    case "appended":
+      return `[+] ${label} appended (existing content preserved) -> ${r.outputPath}`;
+    case "already-up-to-date":
+      return `[=] ${label} already up to date -> ${r.outputPath}`;
+    case "conflict":
+      return `[!] ${label} conflict (not written) -> ${r.outputPath}\n    ${r.reason ?? ""}`;
+    default:
+      return `[?] ${label} ${r.action} -> ${r.outputPath}`;
+  }
+}
+
 export async function runRules(opts: CliOptions): Promise<number> {
   if (!opts.json) printBanner();
 
@@ -84,20 +184,76 @@ export async function runRules(opts: CliOptions): Promise<number> {
     return 1;
   }
 
-  const rulesContent = buildRulesFile(memories, language);
-  const outputPath = opts.output || DEFAULT_OUTPUT;
+  const target: Target = opts.target ?? "cursor-rules";
 
-  if (opts.json) {
-    console.log(JSON.stringify({ rules: memories.length, output: outputPath }));
-    return 0;
+  // Custom --output only applies to single-target runs; --target both
+  // uses defaults for both files (the user can re-run twice if they want
+  // bespoke paths for both).
+  const customOutput = target !== "both" ? opts.output : undefined;
+  if (target === "both" && opts.output && !opts.json) {
+    process.stderr.write(
+      `[warn] --output is ignored when --target=both. Using default paths\n` +
+        `       (.cursor/rules/ai-memory-conventions.mdc and AGENTS.md). ` +
+        `Run the command twice with --target cursor-rules and --target agents-md\n` +
+        `       if you need a custom path for one of them.\n`
+    );
   }
 
-  await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, rulesContent, "utf-8");
+  const results: TargetResult[] = [];
 
-  console.log(`\n[+] Generated Cursor Rules -> ${outputPath}`);
-  console.log(`   ${memories.filter((m) => m.type === "convention").length} conventions + ${memories.filter((m) => m.type === "decision").length} decisions`);
-  console.log(`\n   Cursor will automatically apply these rules to AI responses.`);
+  if (target === "cursor-rules" || target === "both") {
+    const path =
+      (target === "cursor-rules" && customOutput) || CURSOR_RULES_DEFAULT;
+    results.push(await runCursorRulesTarget(memories, language, path));
+  }
+
+  if (target === "agents-md" || target === "both") {
+    const path =
+      (target === "agents-md" && customOutput) || AGENTS_MD_DEFAULT_PATH;
+    results.push(await runAgentsMdTarget(memories, language, path));
+  }
+
+  const conventions = memories.filter((m) => m.type === "convention").length;
+  const decisions = memories.filter((m) => m.type === "decision").length;
+
+  if (opts.json) {
+    console.log(
+      JSON.stringify({
+        rules: memories.length,
+        conventions,
+        decisions,
+        outputs: results.map((r) => ({
+          target: r.target,
+          path: r.outputPath,
+          action: r.action,
+          wrote: r.wrote,
+          ...(r.reason ? { reason: r.reason } : {}),
+        })),
+      })
+    );
+    // Exit non-zero if any target hit a conflict — useful for CI.
+    return results.some((r) => r.action === "conflict") ? 1 : 0;
+  }
+
+  console.log("");
+  for (const r of results) {
+    console.log(formatTargetLine(r));
+  }
+  console.log(
+    `   ${conventions} conventions + ${decisions} decisions`
+  );
+
+  if (results.some((r) => r.target === "cursor-rules" && r.wrote)) {
+    console.log(`\n   Cursor will automatically apply these rules to AI responses.`);
+  }
+  if (results.some((r) => r.target === "agents-md" && r.wrote)) {
+    console.log(
+      `\n   AGENTS.md is read by Codex / Cursor / Windsurf / Copilot / Amp at session start.`
+    );
+  }
+  if (results.some((r) => r.action === "conflict")) {
+    return 1;
+  }
 
   return 0;
 }

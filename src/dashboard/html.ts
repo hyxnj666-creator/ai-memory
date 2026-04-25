@@ -49,7 +49,9 @@ tailwind.config = {
     <div class="flex gap-1">
       <button onclick="navigate('overview')" data-nav="overview" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Overview</button>
       <button onclick="navigate('memories')" data-nav="memories" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Memories</button>
+      <button onclick="navigate('conversations')" data-nav="conversations" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Conversations</button>
       <button onclick="navigate('graph')" data-nav="graph" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Graph</button>
+      <button onclick="navigate('quality')" data-nav="quality" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Quality</button>
       <button onclick="navigate('export')" data-nav="export" class="nav-link px-3 py-3.5 text-sm text-gray-400 hover:text-white">Export</button>
     </div>
   </div>
@@ -80,6 +82,16 @@ let currentView = 'overview';
 let memories = [];
 let stats = null;
 let graphData = null;
+let qualityData = null;
+let conversationsData = null;
+let selectedConvoId = null;
+// Pagination state. Page size is shared across Memories tab and Conversations
+// memory list — both routinely cross 100+ items at v2.4 scale (one CCEB
+// fixture conversation alone yielded 268 memories in real-world testing).
+const PAGE_SIZE = 50;
+let memListPage = 1;
+let memListFiltered = [];   // cached filter result, so the pager can re-slice without re-running the full query
+let convoMemPage = 1;
 
 // === API ===
 async function api(path) {
@@ -102,7 +114,9 @@ async function render() {
   switch (currentView) {
     case 'overview': await renderOverview(app); break;
     case 'memories': await renderMemories(app); break;
+    case 'conversations': await renderConversations(app); break;
     case 'graph': await renderGraph(app); break;
+    case 'quality': await renderQuality(app); break;
     case 'export': await renderExport(app); break;
   }
 }
@@ -134,11 +148,23 @@ async function renderOverview(app) {
   const recentList = s.recent.map(m => {
     const c = TYPE_COLORS[m.type] || TYPE_COLORS.decision;
     const icon = TYPE_ICONS[m.type] || '📝';
-    return \`<div class="flex items-start gap-3 py-3 px-3 rounded-lg hover:bg-gray-800/50 cursor-pointer" onclick='showDetail(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>
+    const detailArg = attrJson(m);
+    const sidArg = m.sourceId ? attrJson(m.sourceId) : null;
+    const sourceChip = m.sourceTitle && sidArg
+      ? \`<button onclick="event.stopPropagation(); jumpToConversation(\${sidArg})"
+           class="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 hover:underline truncate max-w-[280px]"
+           title="Open this conversation in the Conversations tab">
+           💬 \${esc(m.sourceTitle)}
+         </button>\`
+      : '';
+    return \`<div class="flex items-start gap-3 py-3 px-3 rounded-lg hover:bg-gray-800/50 cursor-pointer" onclick='showDetail(\${detailArg})'>
       <span class="text-base mt-0.5">\${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium text-gray-200 truncate">\${esc(m.title)}</div>
-        <div class="text-xs text-gray-500 mt-0.5">\${m.date}\${m.author ? ' · ' + esc(m.author) : ''}</div>
+        <div class="flex items-center gap-2 text-xs text-gray-500 mt-0.5 min-w-0">
+          <span class="shrink-0">\${m.date}\${m.author ? ' · ' + esc(m.author) : ''}</span>
+          \${sourceChip ? '<span class="text-gray-700 shrink-0">·</span>' + sourceChip : ''}
+        </div>
       </div>
       <span class="type-badge \${c.bg} \${c.text} \${c.border} border shrink-0">\${m.type}</span>
     </div>\`;
@@ -245,19 +271,31 @@ function filterMemoriesUI() {
 
   filtered.sort((a, b) => (b.date||'').localeCompare(a.date||''));
 
+  memListFiltered = filtered;
+  memListPage = 1;
   document.getElementById('mem-count').textContent = filtered.length + ' of ' + memories.length;
+  renderMemListPage();
+}
 
+function renderMemListPage() {
   const list = document.getElementById('mem-list');
+  if (!list) return;
+  const filtered = memListFiltered;
   if (!filtered.length) {
     list.innerHTML = '<div class="text-center text-gray-500 py-12">No memories match your filters.</div>';
     return;
   }
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (memListPage > pages) memListPage = pages;
+  const start = (memListPage - 1) * PAGE_SIZE;
+  const slice = filtered.slice(start, start + PAGE_SIZE);
 
-  list.innerHTML = filtered.map(m => {
+  const cards = slice.map(m => {
     const c = TYPE_COLORS[m.type] || TYPE_COLORS.decision;
     const icon = TYPE_ICONS[m.type] || '📝';
     const isResolved = m.status === 'resolved';
-    return \`<div class="rounded-xl border border-gray-800 bg-gray-900 p-4 card-hover cursor-pointer \${isResolved ? 'opacity-60' : ''}" onclick='showDetail(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>
+    return \`<div class="rounded-xl border border-gray-800 bg-gray-900 p-4 card-hover cursor-pointer \${isResolved ? 'opacity-60' : ''}" onclick='showDetail(\${attrJson(m)})'>
       <div class="flex items-start gap-3">
         <span class="text-xl mt-0.5">\${icon}</span>
         <div class="flex-1 min-w-0">
@@ -270,12 +308,17 @@ function filterMemoriesUI() {
           <div class="flex items-center gap-3 mt-2 text-xs text-gray-600">
             <span>\${m.date}</span>
             \${m.author ? '<span>· ' + esc(m.author) + '</span>' : ''}
-            \${m.sourceTitle ? '<span class="truncate max-w-[200px]">· ' + esc(m.sourceTitle) + '</span>' : ''}
+            \${m.sourceTitle && m.sourceId
+              ? '<button onclick="event.stopPropagation(); jumpToConversation(' + attrJson(m.sourceId) + ')" class="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 hover:underline truncate max-w-[280px]" title="Open this conversation">· 💬 ' + esc(m.sourceTitle) + '</button>'
+              : (m.sourceTitle ? '<span class="truncate max-w-[200px]">· ' + esc(m.sourceTitle) + '</span>' : '')
+            }
           </div>
         </div>
       </div>
     </div>\`;
   }).join('');
+
+  list.innerHTML = cards + renderPager('memList', total, memListPage, pages, start);
 }
 
 // === Detail Modal ===
@@ -416,6 +459,261 @@ function renderForceGraph(data) {
   });
 }
 
+// === Quality ===
+async function renderQuality(app) {
+  if (!qualityData) qualityData = await api('quality');
+  const q = qualityData;
+
+  const healthPct = q.total > 0 ? Math.round((q.healthy / q.total) * 100) : 100;
+  const healthColor = healthPct >= 90 ? 'emerald' : healthPct >= 75 ? 'amber' : 'rose';
+
+  // Specificity histogram
+  const maxSpec = Math.max(...q.specHistogram.map(h => h.count), 1);
+  const specBars = q.specHistogram.map(h => {
+    const w = Math.max(2, (h.count / maxSpec) * 100);
+    const isLow = h.score === 0;
+    return \`<div class="flex items-center gap-3 py-1">
+      <span class="text-xs text-gray-500 w-12 text-right tabular-nums">score \${h.score}</span>
+      <div class="flex-1 bg-gray-800 rounded-sm h-5 relative overflow-hidden">
+        <div class="\${isLow ? 'bg-rose-500/60' : 'bg-indigo-500/60'} h-full rounded-sm" style="width:\${w}%"></div>
+      </div>
+      <span class="text-xs text-gray-400 w-12 tabular-nums">\${h.count}</span>
+    </div>\`;
+  }).join('');
+
+  const vagueRows = q.vagueSamples.map(s => {
+    const c = TYPE_COLORS[s.type] || TYPE_COLORS.decision;
+    return \`<div class="py-2 px-3 rounded-lg hover:bg-gray-800/50 border-b border-gray-800/50 last:border-0">
+      <div class="flex items-start gap-2">
+        <span class="type-badge \${c.bg} \${c.text} \${c.border} border shrink-0 mt-0.5">\${s.type}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-gray-200 truncate">\${esc(s.title)}</div>
+          <div class="text-xs text-gray-500 mt-0.5 line-clamp-2">\${esc(s.content)}</div>
+        </div>
+      </div>
+    </div>\`;
+  }).join('');
+
+  const dupRows = q.duplicatePairs.map(p => {
+    const c = TYPE_COLORS[p.type] || TYPE_COLORS.decision;
+    const metric = p.reason === 'duplicate'
+      ? \`jaccard <span class="text-amber-400 font-mono">\${p.jaccard}</span>\`
+      : \`containment <span class="text-rose-400 font-mono">\${p.containment}</span>\`;
+    return \`<div class="py-3 px-3 rounded-lg hover:bg-gray-800/50 border-b border-gray-800/50 last:border-0">
+      <div class="flex items-center justify-between mb-1">
+        <span class="type-badge \${c.bg} \${c.text} \${c.border} border">\${p.type}</span>
+        <span class="text-xs text-gray-500">\${p.reason} · \${metric}</span>
+      </div>
+      <div class="text-sm text-gray-200 truncate">• \${esc(p.titleA)}</div>
+      <div class="text-sm text-gray-400 truncate">• \${esc(p.titleB)}</div>
+    </div>\`;
+  }).join('');
+
+  app.innerHTML = \`<div class="fade-in">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-sm font-semibold text-gray-300">Knowledge Quality</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Detect vague / duplicate / subsumed memories using v2.2 algorithms</p>
+      </div>
+      <button onclick="qualityData=null;render()" class="text-xs text-gray-500 hover:text-gray-300">↻ refresh</button>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="rounded-xl border border-gray-700 bg-gray-900 p-4">
+        <div class="text-3xl font-bold text-white">\${q.total}</div>
+        <div class="text-sm text-gray-400 mt-1">Total memories</div>
+      </div>
+      <div class="rounded-xl border border-\${healthColor}-500/30 bg-\${healthColor}-500/10 p-4">
+        <div class="text-3xl font-bold text-\${healthColor}-400">\${healthPct}%</div>
+        <div class="text-sm text-gray-400 mt-1">Healthy (\${q.healthy})</div>
+      </div>
+      <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+        <div class="text-3xl font-bold text-amber-400">\${q.vague}</div>
+        <div class="text-sm text-gray-400 mt-1">Vague content</div>
+      </div>
+      <div class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">
+        <div class="text-3xl font-bold text-rose-400">\${q.duplicates + q.subsumed}</div>
+        <div class="text-sm text-gray-400 mt-1">Duplicate pairs</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="rounded-xl border border-gray-700 bg-gray-900 p-6">
+        <h3 class="text-sm font-semibold text-gray-300 mb-1">Specificity distribution</h3>
+        <p class="text-xs text-gray-500 mb-4">Higher score = more technical / actionable detail</p>
+        <div class="max-h-[380px] overflow-y-auto pr-2">\${specBars || '<span class="text-gray-600 text-sm">No data</span>'}</div>
+      </div>
+
+      <div class="rounded-xl border border-gray-700 bg-gray-900 p-6">
+        <h3 class="text-sm font-semibold text-gray-300 mb-1">Flagged vague memories</h3>
+        <p class="text-xs text-gray-500 mb-4">Low specificity + generic phrasing. Top 20 shown.</p>
+        <div class="max-h-[380px] overflow-y-auto pr-2">\${vagueRows || '<span class="text-emerald-500 text-sm">✓ No vague memories detected</span>'}</div>
+      </div>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-gray-700 bg-gray-900 p-6">
+      <h3 class="text-sm font-semibold text-gray-300 mb-1">Duplicate &amp; subsumed pairs</h3>
+      <p class="text-xs text-gray-500 mb-4">Memories with shingle similarity &gt; 0.55 (duplicate) or containment &gt; 0.75 (subsumed). Top 30 shown.</p>
+      <div class="max-h-[480px] overflow-y-auto pr-2">\${dupRows || '<span class="text-emerald-500 text-sm">✓ No redundancy detected</span>'}</div>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-xs text-gray-400">
+      <strong class="text-indigo-400">Tip:</strong> Run <code class="bg-gray-800 px-1.5 py-0.5 rounded text-indigo-300">ai-memory reindex --dedup --dry-run</code> in your terminal to preview removals, then without <code class="bg-gray-800 px-1.5 py-0.5 rounded">--dry-run</code> to clean up.
+    </div>
+  </div>\`;
+}
+
+// === Conversations ===
+async function renderConversations(app) {
+  if (!conversationsData) conversationsData = await api('conversations');
+  const convos = conversationsData;
+
+  if (!convos.length) {
+    app.innerHTML = \`<div class="fade-in text-center py-24 text-gray-500">
+      <div class="text-4xl mb-3">💬</div>
+      <div class="text-sm">No conversations yet. Run <code class="text-indigo-400">ai-memory extract</code> first.</div>
+    </div>\`;
+    return;
+  }
+
+  // Pick default selection: most recent
+  if (!selectedConvoId || !convos.find(c => c.sourceId === selectedConvoId)) {
+    selectedConvoId = convos[0].sourceId;
+  }
+
+  const sourceBadge = (src) => {
+    const colors = { cursor: 'bg-sky-500/10 text-sky-400', 'claude-code': 'bg-orange-500/10 text-orange-400', windsurf: 'bg-cyan-500/10 text-cyan-400', copilot: 'bg-blue-500/10 text-blue-400' };
+    const cls = colors[src] || 'bg-gray-500/10 text-gray-400';
+    return \`<span class="\${cls} text-xs px-1.5 py-0.5 rounded font-medium">\${src}</span>\`;
+  };
+
+  // Build a Map for O(1) memory detail lookup instead of scanning + regex on every click
+  const selected = convos.find(c => c.sourceId === selectedConvoId) || convos[0];
+
+  const convoList = convos.map(c => {
+    const selected = c.sourceId === selectedConvoId;
+    const typesBadges = Object.entries(c.types).map(([t, n]) => {
+      const col = TYPE_COLORS[t] || TYPE_COLORS.decision;
+      return \`<span class="\${col.bg} \${col.text} text-[10px] px-1.5 rounded">\${t[0].toUpperCase()}:\${n}</span>\`;
+    }).join(' ');
+    const sidArg = attrJson(c.sourceId);
+    return \`<div data-convo-card="\${esc(c.sourceId)}" onclick="selectConvo(\${sidArg})"
+      class="cursor-pointer p-3 rounded-lg border \${selected ? 'bg-indigo-500/10 border-indigo-500/40' : 'border-transparent hover:bg-gray-800/50 hover:border-gray-700'}">
+      <div class="flex items-center gap-2 mb-1">
+        \${sourceBadge(c.sourceType)}
+        <span class="text-[11px] text-gray-500 font-mono">\${esc(c.sourceId.slice(0, 8))}</span>
+      </div>
+      <div class="text-sm font-medium text-gray-200 line-clamp-2 mb-2">\${esc(c.sourceTitle)}</div>
+      <div class="flex items-center justify-between text-xs text-gray-500">
+        <span>\${c.count} memories</span>
+        <span>\${esc(c.lastDate)}</span>
+      </div>
+      <div class="flex gap-1 mt-1.5 flex-wrap">\${typesBadges}</div>
+    </div>\`;
+  }).join('');
+
+  const convoMemTotal = selected.memories.length;
+  const convoMemPages = Math.max(1, Math.ceil(convoMemTotal / PAGE_SIZE));
+  if (convoMemPage > convoMemPages) convoMemPage = convoMemPages;
+  const convoMemStart = (convoMemPage - 1) * PAGE_SIZE;
+  const convoMemSlice = selected.memories.slice(convoMemStart, convoMemStart + PAGE_SIZE);
+
+  const memList = convoMemSlice.map(m => {
+    const col = TYPE_COLORS[m.type] || TYPE_COLORS.decision;
+    const icon = TYPE_ICONS[m.type] || '📝';
+    const resolved = m.status === 'resolved';
+    const idArg = attrJson(m.id);
+    return \`<div onclick="loadMemoryDetail(\${idArg})" class="flex items-start gap-3 py-2.5 px-3 rounded-lg hover:bg-gray-800/50 cursor-pointer \${resolved ? 'opacity-60' : ''}">
+      <span class="text-base mt-0.5">\${icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-gray-200 truncate \${resolved ? 'line-through' : ''}">\${esc(m.title)}</div>
+        <div class="text-xs text-gray-500 mt-0.5">\${esc(m.date)}</div>
+      </div>
+      <span class="type-badge \${col.bg} \${col.text} \${col.border} border shrink-0">\${m.type}</span>
+    </div>\`;
+  }).join('');
+  const convoMemPager = renderPager('convoMem', convoMemTotal, convoMemPage, convoMemPages, convoMemStart);
+
+  const prefix = selected.sourceId.slice(0, 8);
+  const cliHint = 'ai-memory context --source-id ' + prefix + ' --copy';
+
+  app.innerHTML = \`<div class="fade-in">
+    <div class="flex items-baseline justify-between mb-6">
+      <h2 class="text-sm font-semibold text-gray-300">Conversations (\${convos.length})</h2>
+      <p class="text-xs text-gray-500">Each conversation is one chat window that produced memories. Pick one to see its scope.</p>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <aside class="lg:col-span-4 rounded-xl border border-gray-700 bg-gray-900 p-3 max-h-[70vh] overflow-y-auto space-y-1">
+        \${convoList}
+      </aside>
+      <section class="lg:col-span-8 rounded-xl border border-gray-700 bg-gray-900 p-6">
+        <div class="flex items-start justify-between mb-4 gap-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              \${sourceBadge(selected.sourceType)}
+              <span class="text-xs text-gray-500 font-mono">\${esc(selected.sourceId)}</span>
+            </div>
+            <h3 class="text-base font-semibold text-gray-100 break-words">\${esc(selected.sourceTitle)}</h3>
+            <div class="text-xs text-gray-500 mt-1">
+              \${selected.count} memories · \${esc(selected.firstDate)} → \${esc(selected.lastDate)}\${selected.author ? ' · ' + esc(selected.author) : ''}
+            </div>
+          </div>
+          <button onclick="copyConvoCommand(\${attrJson(prefix)})" id="convo-copy-btn"
+            class="shrink-0 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs font-mono text-indigo-300 transition-colors">
+            Copy CLI
+          </button>
+        </div>
+        <div class="mb-4 p-3 rounded-lg bg-gray-800/50 border border-gray-700/50">
+          <div class="text-xs text-gray-500 mb-1">To load only this conversation into a new AI session:</div>
+          <code class="text-xs text-indigo-300 font-mono break-all">\${esc(cliHint)}</code>
+        </div>
+        <div class="space-y-1 max-h-[55vh] overflow-y-auto">\${memList}</div>
+        \${convoMemPager}
+      </section>
+    </div>
+  </div>\`;
+}
+
+function selectConvo(id) {
+  selectedConvoId = id;
+  convoMemPage = 1;
+  renderConversations(document.getElementById('app')).then(() => {
+    // Keep the selected card visible when picking one far from the top
+    const card = document.querySelector('[data-convo-card="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+// Jump to Conversations tab and preselect the given sourceId (used from Overview / Memories)
+function jumpToConversation(sourceId) {
+  selectedConvoId = sourceId;
+  convoMemPage = 1;
+  navigate('conversations');
+}
+
+async function copyConvoCommand(prefix) {
+  const cmd = 'ai-memory context --source-id ' + prefix + ' --copy';
+  try { await navigator.clipboard.writeText(cmd); } catch {}
+  const btn = document.getElementById('convo-copy-btn');
+  if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy CLI'; }, 1500); }
+}
+
+// Cached O(1) lookup: memoryId -> full memory object
+let memoryByIdMap = null;
+function computeMemoryId(m) {
+  return (m.type + ':' + m.date + ':' + m.title).replace(/[^a-zA-Z0-9:\\u4e00-\\u9fff-]/g, '_').slice(0, 120);
+}
+function buildMemoryIdMap() {
+  memoryByIdMap = new Map();
+  for (const m of memories) memoryByIdMap.set(computeMemoryId(m), m);
+}
+async function loadMemoryDetail(id) {
+  if (!memories.length) { memories = await api('memories'); memoryByIdMap = null; }
+  if (!memoryByIdMap) buildMemoryIdMap();
+  const m = memoryByIdMap.get(id);
+  if (m) showDetail(m);
+}
+
 // === Export ===
 async function renderExport(app) {
   app.innerHTML = \`<div class="fade-in">
@@ -483,6 +781,41 @@ function downloadFile(name, content, type) {
 
 // === Utils ===
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// JSON-encode a value and HTML-entity-encode every char that could collide
+// with an HTML attribute delimiter, so the result is safe to splice into
+// onclick="..." (or onclick='...') without breaking the parser. Without the
+// &quot; escape, JSON.stringify("foo") = "\"foo\"" terminates a double-quoted
+// attribute and silently disables the click handler.
+function attrJson(v) { return JSON.stringify(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// Pager renderer shared by Memories tab and Conversations memory list.
+// Returns '' when total fits in a single page so the UI stays clean for small
+// stores; otherwise emits Prev / Page N of M / Next plus a count summary.
+function renderPager(scope, total, page, pages, start) {
+  if (total <= PAGE_SIZE) return '';
+  const end = Math.min(start + PAGE_SIZE, total);
+  const prevDisabled = page <= 1;
+  const nextDisabled = page >= pages;
+  const btn = (label, target, disabled) =>
+    '<button onclick="setPage(' + attrJson(scope) + ',' + target + ')" '
+    + (disabled ? 'disabled ' : '')
+    + 'class="px-2.5 py-1 rounded border border-gray-700 ' + (disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800 hover:border-gray-600 text-gray-300') + '">' + label + '</button>';
+  return '<div class="flex items-center justify-between gap-3 pt-3 mt-3 border-t border-gray-800 text-xs text-gray-500">'
+    + '<div>Showing ' + (start + 1) + '–' + end + ' of ' + total + ' · Page ' + page + ' of ' + pages + '</div>'
+    + '<div class="flex gap-1">' + btn('‹ Prev', page - 1, prevDisabled) + btn('Next ›', page + 1, nextDisabled) + '</div>'
+    + '</div>';
+}
+
+function setPage(scope, p) {
+  if (scope === 'memList') {
+    memListPage = p;
+    renderMemListPage();
+    document.getElementById('mem-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  } else if (scope === 'convoMem') {
+    convoMemPage = p;
+    renderConversations(document.getElementById('app'));
+  }
+}
 
 // === Init ===
 async function init() {

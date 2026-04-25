@@ -327,6 +327,22 @@ function parseMemoryFile(
   type: MemoryType,
   filename: string
 ): ExtractedMemory | null {
+  // Normalise line endings before any regex work. Memory files written by
+  // ai-memory itself always use LF (renderMemoryFile joins on "\n"), but a
+  // file may arrive as CRLF on Windows in two real-world ways:
+  //   (a) hand-edited in an editor that defaults to CRLF (Notepad, default
+  //       VS Code on Windows without overrides), or
+  //   (b) checked out via git with core.autocrlf=true — the same memory
+  //       file committed by a macOS/Linux teammate is rewritten to CRLF on
+  //       a Windows clone.
+  // The field-boundary regexes below all anchor on `\n\n**Label**:`. Without
+  // this normalisation, CRLF input breaks the lookahead and a single field
+  // greedily absorbs every trailing field on the page (Reasoning swallows
+  // Alternatives + Impact, Alternatives swallows Impact, etc.). The parser
+  // is the only consumer of these regexes; normalising once at the top is
+  // the cheapest fix and keeps every label regex below in LF-only land.
+  content = content.replace(/\r\n?/g, "\n");
+
   const titleMatch = content.match(/^# (.+)$/m);
 
   const allLabels = Object.values(LABELS).flatMap((l) => Object.values(l));

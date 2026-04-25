@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,3 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # CCEB pipeline smoke test (no LLM tokens, ~1s). Catches fixture
+      # format regressions and scorer/runner refactors before they can
+      # invalidate a published baseline.
+      - run: npm run bench:cceb:dry

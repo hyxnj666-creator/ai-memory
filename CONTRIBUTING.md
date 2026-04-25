@@ -46,8 +46,8 @@ npm run dev -- <args>  # Run CLI in dev mode (tsx)
 - Every new feature needs tests
 - Tests live in `src/__tests__/`
 - Use `vitest` — no other test frameworks
-- Mock file system operations, never touch real files in tests
-- Current coverage: 115+ tests across 11 test files
+- Mock file system operations where possible; for IO-required tests use `mkdtemp(tmpdir())` + `chdir` (see `mcp-config-writer.test.ts`, `agents-md-writer.test.ts`, `log-reader.test.ts` for the canonical pattern)
+- Current coverage: 431 tests across 25 test files
 
 ### Commit Messages
 
@@ -95,7 +95,7 @@ Look for issues labeled [`good first issue`](https://github.com/hyxnj666-creator
 
 ### What We're NOT Looking For
 
-- Adding runtime dependencies (we maintain zero deps)
+- Adding runtime dependencies — we keep the surface minimal (currently 2: `@modelcontextprotocol/sdk` for `serve`, `zod` for bundle import validation). Open a discussion before proposing a third.
 - UI frameworks or heavy tooling
 - Cloud/SaaS features (this is a local-first tool)
 - Changes that break backwards compatibility without discussion

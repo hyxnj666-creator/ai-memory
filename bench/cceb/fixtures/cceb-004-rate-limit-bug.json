@@ -1,0 +1,39 @@
+{
+  "id": "cceb-004-rate-limit-bug",
+  "description": "Issue: race condition in the token-bucket rate limiter under concurrent burst",
+  "difficulty": "medium",
+  "tags": ["issue", "single-memory"],
+  "conversation": {
+    "title": "Investigating sporadic 429 storms in production",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Production has been throwing waves of 429s every couple of hours. The rate limiter is configured for 100 req/sec per tenant but the dashboards show real traffic peaks at maybe 20 req/sec. Something is off."
+      },
+      {
+        "role": "assistant",
+        "text": "Walk me through how the limiter is implemented. Is it Redis-backed? Token bucket? Sliding window?"
+      },
+      {
+        "role": "user",
+        "text": "Token bucket in Redis. We do a GET to read the bucket, then DECR + EXPIRE in a separate roundtrip. Hmm — that's not atomic, is it?"
+      },
+      {
+        "role": "assistant",
+        "text": "That's almost certainly the bug. Under concurrent requests for the same tenant, two clients can both read tokens=50, each independently decide they have headroom, and both decrement. You end up over-spending or under-spending depending on the interleaving — and during burst, multiple clients can race past the GET while the bucket is empty, then suddenly all of them get rejected together when the DECR finally happens. That's exactly the '429 storms during otherwise low traffic' signature. Replace the GET + DECR with a single Lua script (or `EVAL`) that reads, decides, and decrements atomically; that's the standard fix for token-bucket-in-Redis."
+      },
+      {
+        "role": "user",
+        "text": "Right. So the issue is: token-bucket rate limiter has a TOCTOU race condition because GET and DECR happen in separate Redis round-trips. Under concurrent bursts this causes spurious 429 storms even when traffic is well below the configured limit. Fix is an atomic Lua script. I'll log this and ship the fix tomorrow."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "issue-rate-limiter-race",
+      "type": "issue",
+      "must_contain": ["race"],
+      "note": "Identified bug in the rate limiter. Either 'race condition' or 'TOCTOU' should appear; both contain 'race'."
+    }
+  ]
+}

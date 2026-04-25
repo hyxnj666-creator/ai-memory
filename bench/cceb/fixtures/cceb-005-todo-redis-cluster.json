@@ -1,0 +1,35 @@
+{
+  "id": "cceb-005-todo-redis-cluster",
+  "description": "TODO: migrate single-node Redis to Redis Cluster before Q3 launch",
+  "difficulty": "easy",
+  "tags": ["todo", "single-memory"],
+  "conversation": {
+    "title": "Capacity planning before Q3 launch",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Q3 launch is projecting 10x the current traffic. Our Redis is a single 8GB ElastiCache node and it's already at 60% memory. We need to do something."
+      },
+      {
+        "role": "assistant",
+        "text": "Two paths: (1) vertical scale — bump to a 32GB node, gives you ~4x headroom but you're still single-shard and the node is a SPOF. (2) Redis Cluster — horizontal, shards across N primary+replica pairs, gives you both capacity and HA. For 10x traffic + a launch you can't roll back from, Cluster is the right call. Cluster mode in ElastiCache handles the shard topology for you; the migration is mostly an application-side change to use a cluster-aware client."
+      },
+      {
+        "role": "user",
+        "text": "Agreed. Let's track this as a follow-up: migrate the single-node Redis to Redis Cluster (3 shards, 1 replica each) before the Q3 launch. Owner: me. Blocking the launch until done."
+      },
+      {
+        "role": "assistant",
+        "text": "Important nuance for the migration plan: any Lua script you run currently must declare all its keys as arguments and use the same hash tag, otherwise Cluster will reject it with CROSSSLOT errors. Audit your scripts before flipping the switch."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "todo-redis-cluster",
+      "type": "todo",
+      "must_contain": ["Redis"],
+      "note": "Explicit follow-up: migrate to Redis Cluster before Q3 launch."
+    }
+  ]
+}

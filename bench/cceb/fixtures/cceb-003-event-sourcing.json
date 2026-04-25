@@ -1,0 +1,35 @@
+{
+  "id": "cceb-003-event-sourcing",
+  "description": "Architecture: introduce event sourcing for the billing audit log",
+  "difficulty": "medium",
+  "tags": ["architecture", "single-memory"],
+  "conversation": {
+    "title": "Designing the billing audit log",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Compliance is asking for a tamper-evident audit log of every billing change — invoice created, line item modified, payment captured, refund issued. Currently we just UPDATE the invoices table and lose the previous state. What's the right architecture?"
+      },
+      {
+        "role": "assistant",
+        "text": "Two reasonable approaches: (1) shadow-table journaling — every UPDATE writes a row to invoices_history; cheap, but couples write-side logic to bookkeeping. (2) event sourcing — the source of truth becomes an append-only event log (`InvoiceCreated`, `LineItemAdjusted`, `PaymentCaptured`, etc.) and the invoices table is a projection rebuilt from the log. Tamper-evidence comes from hash-chaining the events. Event sourcing is more work upfront but answers compliance's question directly: every state change is a first-class, immutable record."
+      },
+      {
+        "role": "user",
+        "text": "Let's go with event sourcing for the billing domain. Events get written to a Postgres `billing_events` table with a SHA-256 hash chain over (prev_hash, payload, timestamp). The current invoices table becomes a read-side projection. We'll keep the rest of the app on the existing CRUD model — only billing needs this."
+      },
+      {
+        "role": "assistant",
+        "text": "Sensible scoping. Two implementation notes: (1) make `billing_events` append-only at the database level — `REVOKE UPDATE, DELETE` from the application role and only the migration role can touch it. (2) the projection rebuilder needs to be deterministic and idempotent so you can replay from any point if the projection drifts. A nightly hash-chain integrity check job is worth building from day one."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-event-sourcing-billing",
+      "type": "architecture",
+      "must_contain": ["event sourcing"],
+      "note": "The architectural decision is event sourcing for billing. Keyword 'event sourcing' must appear in the haystack."
+    }
+  ]
+}

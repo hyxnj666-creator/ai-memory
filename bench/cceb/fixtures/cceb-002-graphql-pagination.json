@@ -1,0 +1,36 @@
+{
+  "id": "cceb-002-graphql-pagination",
+  "description": "Convention: cursor-based pagination is mandatory for all paged GraphQL endpoints",
+  "difficulty": "easy",
+  "tags": ["convention", "single-memory"],
+  "conversation": {
+    "title": "GraphQL pagination strategy for the public API",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We have three new paged endpoints to ship next sprint. Some teams want offset/limit because it's simpler. What should we standardise on?"
+      },
+      {
+        "role": "assistant",
+        "text": "Offset/limit is fine for stable, append-only data, but breaks the moment items can be inserted, edited, or deleted between page fetches — you either skip rows or repeat them. For anything user-facing, cursor pagination (Relay-style: edges/node/cursor + pageInfo.hasNextPage) is the standard. It's stable across mutations and aligns with the Apollo/Relay tooling you're already using."
+      },
+      {
+        "role": "user",
+        "text": "Right. Let's make it a convention then: every paged GraphQL endpoint must use cursor pagination with the Relay connection spec. No more offset/limit in new schema. I'll add a CI lint rule next week to enforce it."
+      },
+      {
+        "role": "assistant",
+        "text": "Good call. One nuance: when you migrate the existing offset endpoints, you'll want to expose both shapes for one minor version so consumers can switch over. The Relay spec also has well-defined `first`/`after`/`last`/`before` semantics — pick `first`+`after` as the canonical pair and reject `last`+`before` unless explicitly needed."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-cursor-pagination",
+      "type": "convention",
+      "must_contain": ["cursor"],
+      "must_not_contain": ["offset is fine"],
+      "note": "The convention is 'use cursor pagination'. Either word 'cursor' or 'Relay' is accepted via the haystack match."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeMemories, readAllMemories } from "../store/memory-store.js";
 import type { ExtractedMemory } from "../types.js";
@@ -99,5 +99,49 @@ describe("writeMemories + readAllMemories", () => {
     await expect(writeMemories(memories, TEST_DIR)).resolves.not.toThrow();
     const result = await readAllMemories(TEST_DIR);
     expect(result).toHaveLength(5);
+  });
+
+  it("parses CRLF-terminated memory files without leaking trailing fields", async () => {
+    // Simulate a memory file that arrived as CRLF — either hand-edited on
+    // Windows or checked out via git with core.autocrlf=true. The parser
+    // must isolate Content / Reasoning / Alternatives / Impact even when
+    // every newline is \r\n. Pre-fix, lazy-quantifier captures absorbed
+    // every trailing field because the field-boundary lookahead requires
+    // \n\n and saw \r\n\r\n instead.
+    const lf = [
+      "# CRLF parser regression",
+      "",
+      "> **Date**: 2026-04-25  ",
+      "> **Author**: tester  ",
+      "> **Source**: cursor:abcdef12  ",
+      "> **Conversation**: CRLF coverage",
+      "",
+      "---",
+      "",
+      "**Context**: ctx-text",
+      "",
+      "**Content**: content-text",
+      "",
+      "**Reasoning**: reasoning-text",
+      "",
+      "**Alternatives**: alts-text",
+      "",
+      "**Impact**: impact-text",
+      "",
+    ].join("\n");
+    const crlf = lf.replace(/\n/g, "\r\n");
+
+    const dir = join(TEST_DIR, "decisions");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "2026-04-25-crlf.md"), crlf, "utf-8");
+
+    const result = await readAllMemories(TEST_DIR);
+    expect(result).toHaveLength(1);
+    const m = result[0];
+    expect(m.context).toBe("ctx-text");
+    expect(m.content).toBe("content-text");
+    expect(m.reasoning).toBe("reasoning-text");
+    expect(m.alternatives).toBe("alts-text");
+    expect(m.impact).toBe("impact-text");
   });
 });

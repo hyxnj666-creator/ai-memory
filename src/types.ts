@@ -57,7 +57,7 @@ export interface ExtractedMemory {
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "dashboard" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "recall" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "dashboard" | "export" | "import" | "doctor" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -94,6 +94,63 @@ export interface CliOptions {
   debug?: boolean;
   /** Dashboard server port */
   port?: number;
+  /** Run quality dedup/cleanup on existing memories (reindex command) */
+  dedup?: boolean;
+  /** Filter context/summary by conversation ID (prefix match, like git short hash) */
+  sourceId?: string;
+  /** Filter context/summary by conversation title substring */
+  convo?: string;
+  /** List all conversations that produced memories, grouped by sourceId */
+  listSources?: boolean;
+  /** When --convo matches multiple conversations, include all (default: most recent only) */
+  allMatching?: boolean;
+  /** Bundle file path for export (--output) / import (positional or --file) */
+  bundle?: string;
+  /** Overwrite existing memory files on import (default: skip) */
+  overwrite?: boolean;
+  /** Skip live LLM connectivity test in `doctor` (useful for CI / offline runs) */
+  noLlmCheck?: boolean;
+  /** Write `.cursor/mcp.json` + `.windsurf/mcp.json` during `init` (v2.4+) */
+  withMcp?: boolean;
+  /** Output target for `rules` command (v2.4+). Default: cursor-rules. */
+  target?: "cursor-rules" | "agents-md" | "both";
+}
+
+// --- Memory Bundle (export/import) ---
+
+export const BUNDLE_VERSION = 1;
+
+export interface BundleMemory {
+  type: MemoryType;
+  title: string;
+  date: string;
+  context?: string;
+  content: string;
+  reasoning?: string;
+  alternatives?: string;
+  impact?: string;
+  sourceId: string;
+  sourceTitle?: string;
+  sourceType: SourceType;
+  author?: string;
+  status?: "active" | "resolved";
+}
+
+export interface MemoryBundle {
+  /** Schema version — increment on breaking changes */
+  version: typeof BUNDLE_VERSION;
+  /** ISO timestamp */
+  exportedAt: string;
+  /** Total memory count (quick peek before parsing entries) */
+  memoryCount: number;
+  /** Tool name + version that produced this bundle */
+  producer: string;
+  /** Author name on the source machine (informational; can be remapped on import) */
+  exportedBy?: string;
+  /** Optional filter description (e.g. "sourceId=b56 convo=resume") */
+  scope?: string;
+  /** Actual memory entries */
+  memories: BundleMemory[];
 }
 
 // --- Config Types ---

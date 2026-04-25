@@ -1,0 +1,29 @@
+{
+  "id": "cceb-009-noise-unresolved",
+  "description": "Noise: question is raised but explicitly left unresolved — no decision yet",
+  "difficulty": "hard",
+  "tags": ["noise", "false-positive-test", "subtle"],
+  "conversation": {
+    "title": "Should we add a feature flag service?",
+    "turns": [
+      {
+        "role": "user",
+        "text": "I keep hearing teams use LaunchDarkly, Unleash, or Flagsmith for feature flags. Do we need one?"
+      },
+      {
+        "role": "assistant",
+        "text": "It depends on how you currently ship: if you're already doing trunk-based development with small PRs going to production daily, the next layer of value is gradual rollouts and per-tenant overrides — that's what flag services give you. If you're still on weekly release branches, the flag service is solving a problem you don't have yet. What does your current release cadence look like?"
+      },
+      {
+        "role": "user",
+        "text": "We deploy a couple of times a week right now. Honestly I'm not sure it's worth the operational cost yet. Let me think about it and bring it up at next week's eng meeting — we can discuss it as a team rather than picking unilaterally."
+      },
+      {
+        "role": "assistant",
+        "text": "That's a reasonable position. If you do come back to it, the open-source self-hosted options (Unleash, Flagsmith) are a much smaller commitment than LaunchDarkly's pricing and you can always graduate later."
+      }
+    ]
+  },
+  "expected": [],
+  "_note": "Tests the extractor's ability to recognise that 'we'll discuss this later' is NOT a decision, architecture choice, or todo. The user explicitly defers the question and lists no action item or owner. Extracting any memory here is a false positive."
+}

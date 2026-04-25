@@ -7,6 +7,7 @@ import { resolveAiConfig, callLLM } from "../extractor/llm.js";
 import { loadConfig } from "../config.js";
 import { printBanner, printError, printWarning } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
+import { scopeBySource } from "./context.js";
 
 const MAX_LLM_CHARS = 60_000; // ~15k tokens — safe for most models
 
@@ -54,13 +55,32 @@ export async function runSummary(opts: CliOptions): Promise<number> {
     return 1;
   }
 
+  let filtered = opts.includeResolved
+    ? memories
+    : memories.filter((m) => m.status !== "resolved");
+
+  // --list-sources: print conversations and exit (no LLM call)
+  if (opts.listSources) {
+    return printSummarySources(filtered, opts);
+  }
+
   if (!opts.json && !opts.allAuthors) {
     console.log(`Summarizing for: ${author} (use --all-authors to include team)\n`);
   }
 
-  let filtered = opts.includeResolved
-    ? memories
-    : memories.filter((m) => m.status !== "resolved");
+  // --source-id / --convo: scope summary to specific conversation(s)
+  if (opts.sourceId || opts.convo) {
+    try {
+      const scope = scopeBySource(filtered, opts.sourceId, opts.convo, !!opts.allMatching);
+      filtered = scope.memories;
+      if (!opts.json && scope.ambiguityWarning) {
+        printWarning(scope.ambiguityWarning);
+      }
+    } catch (err) {
+      printError(`${(err as Error).message} Run "ai-memory summary --list-sources" to see available conversations.`);
+      return 1;
+    }
+  }
 
   if (opts.focus) {
     const focus = opts.focus.toLowerCase();
@@ -113,5 +133,74 @@ export async function runSummary(opts: CliOptions): Promise<number> {
   console.log(`\nSummary written -> ${outputFile}`);
   console.log(`   ${filtered.length} memories summarized`);
 
+  return 0;
+}
+
+/**
+ * Group memories by sourceId for `summary --list-sources` output.
+ * Exported for unit testing.
+ */
+export function groupSummaryConversations(memories: ExtractedMemory[]): Array<{
+  sourceId: string;
+  sourceTitle: string;
+  sourceType: string;
+  count: number;
+  lastDate: string;
+}> {
+  const bySource = new Map<string, {
+    sourceId: string;
+    sourceTitle: string;
+    sourceType: string;
+    count: number;
+    lastDate: string;
+  }>();
+
+  for (const m of memories) {
+    if (!m.sourceId) continue;
+    let entry = bySource.get(m.sourceId);
+    if (!entry) {
+      entry = {
+        sourceId: m.sourceId,
+        sourceTitle: m.sourceTitle || "(untitled)",
+        sourceType: m.sourceType,
+        count: 0,
+        lastDate: m.date,
+      };
+      bySource.set(m.sourceId, entry);
+    }
+    entry.count++;
+    if (m.date && m.date > entry.lastDate) entry.lastDate = m.date;
+  }
+
+  return [...bySource.values()].sort((a, b) =>
+    b.lastDate.localeCompare(a.lastDate)
+  );
+}
+
+function printSummarySources(memories: ExtractedMemory[], opts: CliOptions): number {
+  const summaries = groupSummaryConversations(memories);
+
+  if (opts.json) {
+    console.log(JSON.stringify(summaries));
+    return 0;
+  }
+
+  if (summaries.length === 0) {
+    printError('No conversations with memories yet. Run "ai-memory extract" first.');
+    return 1;
+  }
+
+  console.log(`Conversations with summarizable memories: ${summaries.length}\n`);
+  summaries.forEach((s, i) => {
+    const idShort = s.sourceId.slice(0, 8);
+    const title = s.sourceTitle.length > 50 ? s.sourceTitle.slice(0, 49) + "…" : s.sourceTitle;
+    console.log(
+      ` ${String(i + 1).padStart(2)}. [${s.sourceType.padEnd(11)}] ${idShort}  ${String(s.count).padStart(4)} mem  ${s.lastDate}  ${title}`
+    );
+  });
+
+  console.log(
+    '\nUse: ai-memory summary --source-id <id>  OR  --convo "<title>"  to scope summary.'
+  );
   return 0;
 }

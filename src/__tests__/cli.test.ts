@@ -32,6 +32,12 @@ describe("parseArgs", () => {
     expect(parseArgs(["init"])).toMatchObject({ command: "init" });
   });
 
+  it("parses init --with-mcp", () => {
+    const opts = parseArgs(["init", "--with-mcp"]);
+    expect(opts.command).toBe("init");
+    expect(opts.withMcp).toBe(true);
+  });
+
   it("returns help for unknown command", () => {
     expect(parseArgs(["unknown"])).toMatchObject({ command: "help" });
   });
@@ -187,6 +193,25 @@ describe("parseArgs", () => {
     expect(opts.allAuthors).toBe(true);
   });
 
+  it("parses rules with --target agents-md", () => {
+    const opts = parseArgs(["rules", "--target", "agents-md"]);
+    expect(opts.command).toBe("rules");
+    expect(opts.target).toBe("agents-md");
+  });
+
+  it("parses rules with --target both and --output ignored at runtime", () => {
+    const opts = parseArgs(["rules", "--target", "both", "--output", "x.md"]);
+    expect(opts.target).toBe("both");
+    // CLI still parses --output; the rules command itself ignores it for "both"
+    expect(opts.output).toBe("x.md");
+  });
+
+  it("ignores invalid --target values (leaves opts.target undefined)", () => {
+    const opts = parseArgs(["rules", "--target", "nonsense"]);
+    expect(opts.command).toBe("rules");
+    expect(opts.target).toBeUndefined();
+  });
+
   // --- resolve command ---
 
   it("parses resolve command with pattern", () => {
@@ -224,5 +249,102 @@ describe("parseArgs", () => {
     const opts = parseArgs(["dashboard", "--port", "8080"]);
     expect(opts.command).toBe("dashboard");
     expect(opts.port).toBe(8080);
+  });
+
+  // --- context conversation-scoped flags ---
+
+  it("parses context --source-id", () => {
+    const opts = parseArgs(["context", "--source-id", "b5677be8"]);
+    expect(opts.command).toBe("context");
+    expect(opts.sourceId).toBe("b5677be8");
+  });
+
+  it("parses context --convo with quoted title", () => {
+    const opts = parseArgs(["context", "--convo", "resume tool"]);
+    expect(opts.command).toBe("context");
+    expect(opts.convo).toBe("resume tool");
+  });
+
+  it("parses context --list-sources", () => {
+    const opts = parseArgs(["context", "--list-sources"]);
+    expect(opts.command).toBe("context");
+    expect(opts.listSources).toBe(true);
+  });
+
+  it("parses context --all-matching", () => {
+    const opts = parseArgs(["context", "--convo", "db", "--all-matching"]);
+    expect(opts.convo).toBe("db");
+    expect(opts.allMatching).toBe(true);
+  });
+
+  it("parses context --source-id combined with --copy", () => {
+    const opts = parseArgs(["context", "--source-id", "ab12", "--copy"]);
+    expect(opts.sourceId).toBe("ab12");
+    expect(opts.copy).toBe(true);
+  });
+
+  // --- reindex --dedup ---
+
+  it("parses reindex --dedup --dry-run", () => {
+    const opts = parseArgs(["reindex", "--dedup", "--dry-run"]);
+    expect(opts.command).toBe("reindex");
+    expect(opts.dedup).toBe(true);
+    expect(opts.dryRun).toBe(true);
+  });
+
+  // --- export / import commands ---
+
+  it("parses export command with --output", () => {
+    const opts = parseArgs(["export", "--output", "mem.json"]);
+    expect(opts.command).toBe("export");
+    expect(opts.output).toBe("mem.json");
+  });
+
+  it("parses export with --source-id filter", () => {
+    const opts = parseArgs(["export", "--source-id", "b5677be8", "--output", "convo.json"]);
+    expect(opts.command).toBe("export");
+    expect(opts.sourceId).toBe("b5677be8");
+    expect(opts.output).toBe("convo.json");
+  });
+
+  it("parses export with --convo and --all-authors", () => {
+    const opts = parseArgs(["export", "--convo", "resume tool", "--all-authors"]);
+    expect(opts.convo).toBe("resume tool");
+    expect(opts.allAuthors).toBe(true);
+  });
+
+  it("parses import command with positional bundle path", () => {
+    const opts = parseArgs(["import", "mem.json"]);
+    expect(opts.command).toBe("import");
+    expect(opts.positionalArgs).toEqual(["mem.json"]);
+  });
+
+  it("parses import with --file and --overwrite", () => {
+    const opts = parseArgs(["import", "--file", "mem.json", "--overwrite"]);
+    expect(opts.command).toBe("import");
+    expect(opts.bundle).toBe("mem.json");
+    expect(opts.overwrite).toBe(true);
+  });
+
+  it("parses import with --dry-run and --author remap", () => {
+    const opts = parseArgs(["import", "bundle.json", "--dry-run", "--author", "alice"]);
+    expect(opts.command).toBe("import");
+    expect(opts.positionalArgs).toEqual(["bundle.json"]);
+    expect(opts.dryRun).toBe(true);
+    expect(opts.author).toBe("alice");
+  });
+
+  // --- summary scope flags ---
+
+  it("parses summary --source-id", () => {
+    const opts = parseArgs(["summary", "--source-id", "b5677be8"]);
+    expect(opts.command).toBe("summary");
+    expect(opts.sourceId).toBe("b5677be8");
+  });
+
+  it("parses summary --convo and --list-sources", () => {
+    const opts = parseArgs(["summary", "--list-sources"]);
+    expect(opts.command).toBe("summary");
+    expect(opts.listSources).toBe(true);
   });
 });

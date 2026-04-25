@@ -1,0 +1,29 @@
+{
+  "id": "cceb-008-noise-chitchat",
+  "description": "Noise: small talk and a how-do-I question with no decision, architecture, or commitment",
+  "difficulty": "easy",
+  "tags": ["noise", "false-positive-test"],
+  "conversation": {
+    "title": "Quick TypeScript syntax question",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Hey quick one — what's the difference between `unknown` and `any` in TypeScript again? I always forget."
+      },
+      {
+        "role": "assistant",
+        "text": "`any` opts out of type checking entirely — you can do anything with the value and TS won't complain. `unknown` is the safe counterpart: TS knows you have *something*, but you must narrow it (typeof / instanceof / a type guard) before you can use it. Rule of thumb: prefer `unknown` for inputs you don't trust, use `any` only when you genuinely need the escape hatch."
+      },
+      {
+        "role": "user",
+        "text": "Got it, thanks. Also — coffee tomorrow at the usual place?"
+      },
+      {
+        "role": "assistant",
+        "text": "Sure, see you there."
+      }
+    ]
+  },
+  "expected": [],
+  "_note": "This fixture is intentionally empty: the conversation contains no project decisions, architecture choices, conventions, todos, or issues. A well-tuned extractor should produce zero memories. Any extracted memory here counts as a false positive."
+}
