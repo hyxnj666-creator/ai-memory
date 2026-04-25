@@ -2,7 +2,24 @@
 
 ## [Unreleased] — v2.5 (in development)
 
-_No entries yet. Next release is the v2.5 cycle: see [ROADMAP.md](ROADMAP.md) for in-flight scope._
+### Planned — quality lift + Anthropic Skills + distribution (2026-04-26)
+
+Scope locked in [`docs/decisions/2026-04-26-post-v2.4-strategy.md`](docs/decisions/2026-04-26-post-v2.4-strategy.md). Ten items stack-ranked by edge-per-day toward the 1000★ target; full breakdown in [ROADMAP.md](ROADMAP.md) §"v2.5 — Quality lift + Skills + distribution".
+
+- **Must ship (week 1, publish as `2.5.0`):**
+  - **v2.5-01** — lift CCEB precision from 43.8% to ≥60% via prompt-side changes (sub-claim merge into parent `reasoning`/`alternatives`/`impact`, TODO discipline, type-classification calibration), republish baseline against `gpt-4o-mini`. Headline target F1 65%+ at recall ≥75%. The republished number is the single most reusable v2.5 launch asset.
+  - **v2.5-02** — `ai-memory try`: no-API-key demo mode that runs `rules --target agents-md` against the bundled `docs/assets/demo/scenario/` 3-memory store. Closes the "needs `OPENAI_API_KEY` before any output" first-impression conversion leak.
+  - **v2.5-03** — distribution: submit to mcp.so / glama.ai / cursor.directory; GitHub Topics; AGENTS.md spec PR.
+- **Strongly recommended (weeks 2-3):**
+  - **v2.5-04** — Anthropic Skills output (`rules --target skills`). First-mover on Skills (introduced 2026-Q1, hot in Q2); spike-first to date-stamp the schema we target.
+  - **v2.5-05** — `--redact` flag for PII / secrets / internal URLs.
+  - **v2.5-06** — OpenAI Codex CLI as the 5th editor source.
+  - **v2.5-07** — AGENTS.md downstream evaluation (do generated rules actually steer agents?).
+- **Exploratory (weeks 3-4):** v2.5-08 CCEB v1.1 30 fixtures + LongMemEval subset; v2.5-09 README "1M-context FAQ"; v2.5-10 memory↔commit linking spike.
+
+Cadence target 3-4 weeks. Descope rule: if v2.5-01 slips past week 1, v2.5-04 drops to v2.6. If 30-day post-v2.4-launch metrics fall below [`docs/launch-plan.md`](docs/launch-plan.md) "Success metrics" floors, scope freezes and we re-prioritise from real user feedback.
+
+## [2.4.0] - 2026-04-26
 
 ## [2.4.0] - 2026-04-26
 

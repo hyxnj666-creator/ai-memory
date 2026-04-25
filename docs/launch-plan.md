@@ -1,7 +1,11 @@
 # Launch Plan — v2.4 push to 1000★
 
-> How we go from "v2.3 shipped, handful of users" to "HN front page + sustained
-> star velocity". Owner: @hyxnj666-creator. Target window: once v2.4 lands.
+> How we go from "v2.4 published, handful of users" to "HN front page + sustained
+> star velocity". Owner: @hyxnj666-creator. Target window: Tue 2026-04-28 morning ET.
+>
+> **Status (2026-04-26):** `ai-memory-cli@2.4.0` published to npm. v2.5 scope
+> locked in [`decisions/2026-04-26-post-v2.4-strategy.md`](decisions/2026-04-26-post-v2.4-strategy.md);
+> the same 1000★ target carries through the v2.5 cycle.
 
 This is the working doc for the 1000-star push. Two decisions are now settled:
 
@@ -92,11 +96,15 @@ Launch credibility (in progress, ~1 dev day remaining):
       regional firewalls are documented in
       [`docs/benchmarks/cceb-baseline.md`](benchmarks/cceb-baseline.md).
 - [ ] **CCEB v1.1 fixture growth + LongMemEval 50-query subset adapter.**
+      Moved to v2.5 (item v2.5-08, see
+      [post-v2.4 strategy ADR](decisions/2026-04-26-post-v2.4-strategy.md)).
       Grow CCEB toward ~30 fixtures via PRs; add the LongMemEval adapter
       so we can cite apples-to-apples numbers against runtime memory
-      benchmarks when reviewers ask. Per [ADR](decisions/2026-04-25-category-positioning.md),
+      benchmarks when reviewers ask. Per
+      [category-positioning ADR](decisions/2026-04-25-category-positioning.md),
       shipping both yardsticks takes both common critiques ("untested toy"
-      and "wrong yardstick") off the table. Est. 1 dev day.
+      and "wrong yardstick") off the table. Est. 3-4 dev days (mostly
+      fixture authoring).
 - [x] **Demo GIF — recording infrastructure** (shipped 2026-04-25). The
       headline GIF is generated from a checked-in `vhs` script + a hand-curated
       scenario, not screen-captured. Means re-renders are deterministic,
@@ -211,3 +219,5 @@ When priorities change, don't rewrite this doc silently — add an entry here:
 | 2026-04-25 | **First published CCEB baseline: F1 56.0% on `gpt-4o-mini`.** | 9 fixtures, 70.5 s, ≈ $0.005. Recall 77.8% (every signal-bearing fixture got at least one TP); Precision 43.8% dragged down by *over-extraction* (one logical decision splitting into 2–4 candidates, follow-up actions promoted to standalone TODOs). Both noise fixtures: 100% — no hallucinations under pressure, the failure mode HN audiences poke hardest. Number is honest, not gamed: published as-is rather than silently re-running until variance gave a prettier 60%+. The over-extraction pattern is the v2.5 prompt-tuning target (merge sub-claims into parent `reasoning`/`impact`; tighten TODO discipline). Full breakdown + sample misses + sample FPs in [`docs/benchmarks/cceb-baseline.md`](benchmarks/cceb-baseline.md). |
 | 2026-04-25 | **Network recipe for runs behind regional firewalls: `HTTPS_PROXY=http://127.0.0.1:7890` + `NODE_USE_ENV_PROXY=1` (Node 24+).** | Hit during the first baseline run on a mainland-China connection. Node v18–23's built-in `fetch()` ignores `HTTPS_PROXY` entirely; Node v24 added `NODE_USE_ENV_PROXY` as the opt-in. Without both env vars set, `bench:cceb` (and any other LLM-calling command) silently bypasses the user's local proxy and times out. Captured in `docs/benchmarks/cceb-baseline.md` so the next maintainer doesn't re-discover this from scratch. No code change in `ai-memory` itself — the runner stays vanilla `fetch()`. |
 | 2026-04-25 | **`package.json` bumped to 2.4.0 with pipeline-positioning description.** Description: "Turn editor chat history (Cursor, Claude Code, Windsurf, Copilot) into typed Markdown decisions + AGENTS.md rules — local-first, git-trackable, zero remember() calls." Keywords gained `agents-md` / `windsurf` / `github-copilot` / `knowledge-pipeline` / `chat-history` / `local-first`; dropped `model-context-protocol` (redundant with `mcp` + `mcp-server`) and `embeddings` (low search volume). | Both fields surface on the npmjs.com search results page and in package detail metadata. Version bump is mechanical-but-final: anything else CHANGELOG-worthy that lands before publish becomes 2.4.1, not v2.4. CHANGELOG date stamp deliberately *not* set yet — that's the publish-day step, setting it earlier would be a lie if publish slips. |
+| 2026-04-26 | **`ai-memory-cli@2.4.0` published to npm + `v2.4.0` git tag pushed.** CHANGELOG date-stamped (commit `3f21251`); `prepublishOnly` re-ran typecheck + 431 tests + build clean; tarball 240.8 kB / 9 files / `dist-tags.latest = 2.4.0`. Hero GIF render still deferred (POSIX-only via `vhs`; manual Windows fallback documented in `docs/assets/demo/RECORDING-WINDOWS.md`). | **Decoupled publish from HN promotion.** Rationale: (a) all hard blockers cleared (tests / typecheck / `npm pack` clean), (b) version-locking lets v2.5 work start on a clean baseline, (c) GIF placeholder renders as invisible HTML comment on npmjs.com so first-impression cost is "no hero GIF" not "broken README", (d) if GIF lands by Monday, ship as v2.4.1 patch and HN points at v2.4.1; otherwise HN points at v2.4.0 + GIF in the README on GitHub. HN window unchanged: target Tue 2026-04-28 morning ET (Beijing 20:30). |
+| 2026-04-26 | **v2.5 scope locked in [`decisions/2026-04-26-post-v2.4-strategy.md`](decisions/2026-04-26-post-v2.4-strategy.md).** 10 items stack-ranked by edge-per-day toward 1000★. Must-ship week 1 (publish as `2.5.0` patch): (01) lift CCEB precision 43.8% → ≥60% & republish baseline; (02) `ai-memory try` no-API-key demo mode; (03) MCP marketplace + GitHub Topics + AGENTS.md spec PR. Strongly recommended weeks 2-3: (04) Anthropic Skills output `rules --target skills`; (05) `--redact` flag; (06) OpenAI Codex CLI source; (07) AGENTS.md downstream evaluation. Exploratory weeks 3-4: (08) CCEB v1.1 + LongMemEval subset; (09) README "1M-context FAQ"; (10) memory↔commit linking spike. | The four "only we do this" claims need fresh proof points every release or they decay to background noise. v2.5-01 + v2.5-04 + v2.5-07 each generate one. v2.5-04 (Skills) is the strategic bet: hot 2026-Q2 trend, no competitor in any of our three buckets has touched it, parallels the `AGENTS.md` first-mover play that worked. v2.5-01 (precision lift) is the only item that turns into republishable HN content — F1 56% → 70% is a "we listened" narrative; new features are not. Cadence target 3-4 weeks; descope rule: if v2.5-01 slips past week 1, v2.5-04 drops to v2.6. If 30-day post-launch metrics fall below this plan's "Success metrics" floors, scope freezes and we re-prioritise from real user feedback. |
