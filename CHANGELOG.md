@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased] — v2.4 (in development)
+## [Unreleased] — v2.5 (in development)
+
+_No entries yet. Next release is the v2.5 cycle: see [ROADMAP.md](ROADMAP.md) for in-flight scope._
+
+## [2.4.0] - 2026-04-26
 
 ### Fixed — `doctor` displayed the wrong directory for Cursor conversations (2026-04-25)
 
