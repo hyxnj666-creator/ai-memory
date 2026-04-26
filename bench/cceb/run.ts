@@ -81,11 +81,28 @@ Options:
 `);
 }
 
+// Mirror the fallback model that `extractor/llm.ts:resolveAiConfig` uses when
+// no per-provider model env var is set. Keeping these in sync prevents the
+// scorecard from labelling a run "openai (default)" when it actually called
+// gpt-4o-mini — a known cosmetic artefact tracked since the v2.4 baseline.
+const LLM_DEFAULT_MODEL = "gpt-4o-mini";
+
 function detectModel(): string {
-  // Best-effort: report which credential the extractor will pick up.
-  if (process.env.AI_REVIEW_API_KEY) return process.env.AI_REVIEW_MODEL ?? "<AI_REVIEW provider>";
-  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_MODEL ?? "openai (default)";
-  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_MODEL ?? "anthropic (default)";
+  if (process.env.AI_REVIEW_API_KEY) {
+    return process.env.AI_REVIEW_MODEL ?? LLM_DEFAULT_MODEL;
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return process.env.OPENAI_MODEL ?? LLM_DEFAULT_MODEL;
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_MODEL ?? LLM_DEFAULT_MODEL;
+  }
+  if (process.env.OLLAMA_HOST || process.env.OLLAMA_MODEL) {
+    return process.env.OLLAMA_MODEL ?? "llama3.2";
+  }
+  if (process.env.LM_STUDIO_BASE_URL || process.env.LM_STUDIO_MODEL) {
+    return process.env.LM_STUDIO_MODEL ?? "default";
+  }
   return "<no AI key detected>";
 }
 

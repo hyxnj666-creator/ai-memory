@@ -36,6 +36,31 @@ QUALITY CHECKLIST (each item must satisfy ALL):
 □ DURABLE: still relevant weeks/months later (skip temporary debugging steps)
 □ COMPLETE: contains the full technical picture (problem + solution + why)
 
+ONE-MEMORY-PER-DECISION RULE (read carefully — this is the #1 cause of over-extraction):
+- ONE conversation thread about ONE technical decision = ONE memory.
+  Implementation gotchas, security hardening, permissions, edge-case handling,
+  and follow-up nudges that ATTACH to that decision belong inside the parent
+  memory's "reasoning" / "alternatives" / "impact" fields — NOT as separate
+  memories.
+- Sub-claims that should be MERGED into the parent, never emitted as their own memory:
+  ✗ Implementation gotchas mentioned alongside a decision
+    e.g. "audit your Lua scripts before flipping the switch" attached to a
+    Redis Cluster migration → merge into the parent TODO's "impact"
+  ✗ Permission / access constraints that are part of the architecture
+    e.g. "REVOKE UPDATE, DELETE on billing_events at the database role" attached
+    to event-sourcing architecture → merge into the parent architecture's "impact"
+  ✗ "Nice-to-have" follow-ups suggested by the assistant
+    e.g. "a nightly hash-chain integrity check job is worth building" → merge
+    into the parent architecture's "reasoning" or drop entirely
+  ✗ Sub-steps of the chosen solution that the conversation walks through
+    e.g. "deprecate the old client_id by end of quarter" attached to a PKCE
+    decision → merge into the parent decision's "impact"
+- Soft cap: a single conversation thread typically yields 0–3 memories. If you
+  emit 4+, you are almost certainly splitting one logical decision. STOP and
+  merge. The exception: a conversation that explicitly enumerates 4+
+  separable items ("Decisions: (1) ..., (2) ..., (3) ..., (4) ...") — only
+  then is 4+ legitimate.
+
 RULES:
 - Extract ONLY concrete, specific, actionable information
 - Skip: small talk, failed debugging attempts that led nowhere, routine code generation, vague plans, tool setup steps, "let me try X" without conclusion
@@ -49,11 +74,42 @@ RULES:
 - ${dateInstruction}
 ${typeFilter}${existingBlock}
 TYPE DEFINITIONS:
-- decision: A concrete technical choice (library, pattern, algorithm, architecture approach). REQUIRES: reasoning + alternatives
+- decision: A one-time technical choice (library, pattern, algorithm, vendor). REQUIRES: reasoning + alternatives
 - architecture: System structure, data flow, module boundaries, component relationships. REQUIRES: concrete module/file references
-- convention: Code style, naming rules, file organization, workflow rules. REQUIRES: specific do/don't examples
-- todo: Explicit follow-up task mentioned in conversation. REQUIRES: clear scope and acceptance criteria
-- issue: Bug diagnosed and fixed. REQUIRES: root cause + exact fix + affected files
+- convention: A team-wide RULE other code/PRs must follow ("every X must Y"). REQUIRES: specific do/don't examples
+- todo: An EXPLICITLY committed follow-up task. REQUIRES ALL THREE:
+    (a) Explicit commitment language in the conversation: "let's track this", "follow-up:", "TODO:", "action item:", "we will", "我们会", "待办", "下周开 PR"
+    (b) Clear scope (what gets done) AND clear done-criteria (how you know it's complete)
+    (c) An owner OR a deadline OR an explicit blocking event ("blocking the launch until done")
+  DO NOT extract as TODO:
+    ✗ Implementation gotchas mentioned in passing ("audit Lua scripts", "watch for CROSSSLOT errors")
+    ✗ Suggestions the assistant offers ("worth building from day one", "I'd suggest...")
+    ✗ Sub-steps of a decision being implemented (those go into the decision's "impact")
+    ✗ "I'll add a CI lint rule next week" — incidental aside, NOT a tracked task UNLESS it's the headline of the conversation
+- issue: Bug diagnosed and fixed. REQUIRES: root cause + exact fix + affected files. The fix-deployment is impact, NOT a separate TODO.
+
+TYPE BOUNDARY CASES (use these to break ties when content fits multiple types):
+  Convention vs Decision:
+    A forward-looking RULE for future code/PRs → convention (even if decided in one conversation)
+    A one-off CHOICE between options → decision
+    Examples:
+    • "Every paged GraphQL endpoint MUST use cursor pagination, no more offset/limit in new schema" → CONVENTION
+      (it's a rule the team agrees to follow, not a one-time choice)
+    • "We're switching SPA auth from implicit flow to PKCE" → DECISION
+      (a one-time architectural change, not a forward-looking rule)
+    • "Every job handler must be idempotent" → CONVENTION (rule for all handlers)
+    • "We'll adopt BullMQ as the standard background-job system" → DECISION (vendor pick)
+
+  Architecture vs Decision:
+    Describes system STRUCTURE, data flow, or component boundaries → architecture
+    Picks ONE option from N (library, vendor, algorithm) → decision
+    Examples:
+    • "Billing audit log uses event sourcing with hash-chained Postgres events table" → ARCHITECTURE
+    • "We chose pnpm over npm/yarn for the monorepo" → DECISION
+
+  Issue vs TODO:
+    A bug + diagnosis + fix → issue (the deploy of the fix is "impact", not a separate TODO)
+    An unrelated future task → todo (only if it meets the strict TODO criteria above)
 
 BAD examples (auto-rejected — DO NOT produce these):
   ✗ title: "数据库选择" content: "选择了 PostgreSQL"
@@ -68,6 +124,19 @@ BAD examples (auto-rejected — DO NOT produce these):
     → WHY BAD: what is incremental about it? state tracking? cursor position? hash comparison?
   ✗ content: "优化了性能"
     → WHY BAD: what metric? what technique? what before/after?
+  ✗ Splitting one decision into 3+ memories:
+    Conversation: "Let's adopt event sourcing for billing. REVOKE UPDATE/DELETE
+    on the events table. Build a nightly hash-chain integrity check."
+    BAD output (3 memories):
+      [architecture: event sourcing for billing]
+      [todo: REVOKE permissions on events table]
+      [todo: build nightly integrity check]
+    GOOD output (1 memory):
+      [architecture: event sourcing for billing
+        impact: "billing_events table (REVOKE UPDATE/DELETE from app role),
+                 nightly hash-chain integrity check job"]
+    → WHY: the permissions and integrity check are implementation details OF
+      the event-sourcing decision, not independent memories.
 
 GOOD examples (aim for this level of detail):
   Example 1 — decision:

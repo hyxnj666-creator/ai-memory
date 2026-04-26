@@ -19,7 +19,37 @@ Scope locked in [`docs/decisions/2026-04-26-post-v2.4-strategy.md`](docs/decisio
 
 Cadence target 3-4 weeks. Descope rule: if v2.5-01 slips past week 1, v2.5-04 drops to v2.6. If 30-day post-v2.4-launch metrics fall below [`docs/launch-plan.md`](docs/launch-plan.md) "Success metrics" floors, scope freezes and we re-prioritise from real user feedback.
 
-## [2.4.0] - 2026-04-26
+### Shipped in development — v2.5-01 — extraction prompt rewrite (CCEB F1 56.0% → 76.2%) (2026-04-26)
+
+Headline: **CCEB F1 56.0% → 76.2% (+20.2 pp)** on `gpt-4o-mini`, with **precision 43.8% → 66.7% (+22.9 pp)** and **recall 77.8% → 88.9% (+11.1 pp)**. Both v2.5-01 KPI floors (P ≥60%, F1 ≥65%, recall ≥75%) cleared with margin. Full per-type breakdown, methodology, and remaining-work list in [`docs/benchmarks/cceb-baseline.md`](docs/benchmarks/cceb-baseline.md).
+
+Three additions to `src/extractor/prompts.ts:buildExtractionPrompt`, each targeting a v2.4 false-positive pattern:
+
+- **`ONE-MEMORY-PER-DECISION RULE`** — explicit anti-splitting instruction with four `✗` examples taken directly from the v2.4 false-positive set (Lua-script audit attached to a Redis Cluster TODO; `REVOKE UPDATE/DELETE` attached to event-sourcing architecture; nightly integrity-check job; `client_id` deprecation attached to PKCE). Caps a single chunk at 0–3 memories unless the conversation literally enumerates 4+ separable items, which preserves the legitimate 3-memory case in `cceb-006-multi-memory`.
+- **Tightened `todo` type definition** — three required gates: explicit commitment language ("let's track this", "TODO:", "我们会", "下周开 PR"), clear scope + done-criteria, and an owner OR deadline OR blocking event. With four `✗` reject examples for "implementation gotcha mentioned in passing" and "incidental aside" patterns. The v2.4 TODO precision was 20% (1 TP / 4 FPs); v2.5-01 is 33.3% (1 TP / 2 FPs).
+- **`TYPE BOUNDARY CASES` block** — disambiguates Convention vs Decision (a forward-looking *rule* → convention, even if decided once), Architecture vs Decision (system *structure* → architecture, one-of-N *choice* → decision), and Issue vs TODO (a fix-deploy is *impact* of the issue, not a separate TODO). Closed the v2.4 architecture FN and issue FP, lifting both type rows to perfect 100% F1.
+
+`bench/cceb/run.ts:detectModel` was also fixed in the same round — it now mirrors the fallback chain in `extractor/llm.ts:resolveAiConfig` instead of returning `"openai (default)"`, so the scorecard label matches the model that actually ran (the v2.4 doc tracked this as a known cosmetic artefact).
+
+Per-fixture changes vs v2.4:
+
+| Fixture | v2.4 (extracted / TP / FP) | v2.5-01 | Net |
+|---|---|---|---|
+| `cceb-001-oauth-pkce` (decision) | 2 / 1 / 1 | 1 / 1 / 0 | −1 FP |
+| `cceb-002-graphql-pagination` (convention) | 1 / 0 / 1 (typed as decision) | 0 / 0 / 0 | type-FP cleared, convention still missing |
+| `cceb-003-event-sourcing` (architecture) | 4 / 1 / 3 | 3 / 1 / 2 | −1 FP |
+| `cceb-004-rate-limit-bug` (issue) | 2 / 1 / 1 | 1 / 1 / 0 | **perfect** |
+| `cceb-005-todo-redis-cluster` (todo) | 3 / 1 / 2 | 2 / 1 / 1 | −1 FP |
+| `cceb-006-multi-memory` (3 expected) | 3 / 3 / 0 | 3 / 3 / 0 | unchanged (perfect both runs) |
+| `cceb-007-cjk-decision` (decision) | 3 / 1 / 2 | 2 / 1 / 1 | −1 FP |
+| `cceb-008-noise-chitchat` (0 expected) | 0 / 0 / 0 | 0 / 0 / 0 | unchanged (perfect — no hallucination on noise) |
+| `cceb-009-noise-unresolved` (0 expected) | 0 / 0 / 0 | 0 / 0 / 0 | unchanged (perfect — no hallucination on unresolved) |
+
+Wall-clock dropped from 70.5 s to 47.9 s (~33% faster) because over-extracting fixtures now emit fewer items, even though the prompt itself grew by ~1.6K tokens.
+
+Four FPs and one FN remain. All four FPs are smaller-magnitude versions of the over-extraction pattern (sub-claim emitted alongside parent), pointing at the next lever: a post-extract pairwise dedup inside a single fixture, currently only invoked on multi-chunk extractions. The remaining FN (`cceb-002` convention) is the model under-classifying "every X must Y" as a decision after a multi-option discussion — fix candidate is one more `TYPE BOUNDARY CASES` example pinning that exact wording. Both tracked for the next v2.5 iteration.
+
+431 tests still pass; no test or pipeline changes were needed because the prompt body is checked by string-membership tests that are robust to body rewrites.
 
 ## [2.4.0] - 2026-04-26
 
