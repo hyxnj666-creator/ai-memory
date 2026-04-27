@@ -1,0 +1,24 @@
+{
+  "name": "ai-memory",
+  "version": "2.6.0",
+  "description": "Turn editor chat history (Cursor/Claude Code/Windsurf/Copilot/Codex) into typed Markdown memories + AGENTS.md + Cursor Rules + Anthropic Skills — local-first, git-trackable.",
+  "author": {
+    "name": "Conor Liu",
+    "url": "https://github.com/hyxnj666-creator"
+  },
+  "homepage": "https://github.com/hyxnj666-creator/ai-memory",
+  "repository": "https://github.com/hyxnj666-creator/ai-memory",
+  "license": "MIT",
+  "keywords": [
+    "ai-memory",
+    "agents-md",
+    "cursor-rules",
+    "chat-history",
+    "mcp-server",
+    "knowledge-management",
+    "claude-code",
+    "windsurf"
+  ],
+  "mcpServers": "./.mcp.json",
+  "rules": "./.cursor/rules/"
+}
