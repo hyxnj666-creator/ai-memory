@@ -3,10 +3,18 @@ import type {
   CliOptions,
   ExtractedMemory,
   MemoryType,
+  RedactConfig,
 } from "../types.js";
 import { buildExtractionPrompt } from "./prompts.js";
 import { resolveAiConfig, callLLM } from "./llm.js";
 import { readAllMemories } from "../store/memory-store.js";
+import {
+  buildRules,
+  formatAuditTrail,
+  redact,
+  shouldRedact,
+  type RedactionHit,
+} from "./redact.js";
 
 const CHUNK_SIZE = 20_000;   // chars (~5k tokens) per LLM call
 const CHUNK_OVERLAP = 2_000; // chars of context carried over between chunks
@@ -257,12 +265,14 @@ export interface QualityStats {
   filteredDuplicate: number;
   filteredVague: number;
   filteredExistingDup: number;
+  /** TODOs dropped because they are sub-steps of a same-extraction decision/architecture/convention */
+  filteredSubsumed: number;
 }
 
 function qualityFilter(memories: ExtractedMemory[]): { memories: ExtractedMemory[]; stats: QualityStats } {
   const stats: QualityStats = {
     total: memories.length, kept: 0,
-    filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0,
+    filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0, filteredSubsumed: 0,
   };
 
   const filtered = memories.filter((m) => {
@@ -287,6 +297,12 @@ function qualityFilter(memories: ExtractedMemory[]): { memories: ExtractedMemory
 
 const SHINGLE_DEDUP_THRESHOLD = 0.55;
 const CONTAINMENT_THRESHOLD = 0.75;
+const CROSS_TYPE_SUBSUMPTION_THRESHOLD = 0.75;
+
+// Types that can "subsume" a TODO: if a TODO's content is mostly contained
+// inside a decision/architecture/convention from the same extraction, it is a
+// sub-step of that larger memory and should not be stored as a separate file.
+const TODO_ANCHOR_TYPES = new Set<string>(["decision", "architecture", "convention"]);
 
 function deduplicateMemories(memories: ExtractedMemory[]): ExtractedMemory[] {
   const seenTitles = new Set<string>();
@@ -344,6 +360,28 @@ function deduplicateMemories(memories: ExtractedMemory[]): ExtractedMemory[] {
   }
 
   return kept;
+}
+
+/**
+ * Drop TODO memories that are sub-steps of a decision/architecture/convention
+ * from the same extraction pass. A TODO is "subsumed" when its shingles are
+ * contained at >= CROSS_TYPE_SUBSUMPTION_THRESHOLD inside a richer anchor
+ * memory (title + content + reasoning joined). This cuts a class of FPs where
+ * the LLM both extracts "use PKCE" as a decision AND "implement PKCE" as a
+ * TODO from the same conversation chunk.
+ */
+function deduplicateSubsumedTodos(memories: ExtractedMemory[]): ExtractedMemory[] {
+  const anchors = memories
+    .filter((m) => TODO_ANCHOR_TYPES.has(m.type))
+    .map((m) => shingles([m.title, m.content, m.reasoning ?? ""].join(" ")));
+
+  if (anchors.length === 0) return memories;
+
+  return memories.filter((m) => {
+    if (m.type !== "todo") return true;
+    const todoSh = shingles([m.title, m.content].join(" "));
+    return !anchors.some((aSh) => containmentSimilarity(todoSh, aSh) > CROSS_TYPE_SUBSUMPTION_THRESHOLD);
+  });
 }
 
 /**
@@ -424,6 +462,10 @@ function parseExtractionResult(
 export interface ExtractionResult {
   memories: ExtractedMemory[];
   qualityStats: QualityStats;
+  /** Per-rule redaction hit counts (v2.5-05+). Empty when redaction is off or no matches. */
+  redactionHits?: RedactionHit[];
+  /** Total characters redacted across all rules. 0 when redaction is off or no matches. */
+  redactionTotalChars?: number;
 }
 
 export async function extractMemories(
@@ -431,17 +473,41 @@ export async function extractMemories(
   opts: CliOptions,
   fromTurn = 0,
   modelOverride?: string,
-  outputDir?: string
+  outputDir?: string,
+  /**
+   * Redaction config from `.ai-memory/.config.json` `redact` block. v2.5-05+.
+   * The actual on/off decision uses `shouldRedact(opts.redact, opts.noRedact, redactConfig)`
+   * — CLI flags override the config-level `enabled`.
+   */
+  redactConfig?: RedactConfig
 ): Promise<ExtractionResult> {
   const config = resolveAiConfig(modelOverride);
   if (!config) {
     throw new Error("No AI API key found. Set AI_REVIEW_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.");
   }
   const verbose = opts.verbose ?? false;
-  const emptyStats: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0 };
+  const emptyStats: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0, filteredSubsumed: 0 };
 
-  const text = conversationToText(conversation, fromTurn);
+  let text = conversationToText(conversation, fromTurn);
   if (!text.trim()) return { memories: [], qualityStats: emptyStats };
+
+  // v2.5-05: redact secrets / PII / internal hostnames BEFORE chunking
+  // so the redaction pass runs once per conversation rather than per
+  // chunk, and so each chunk fed to the LLM is already scrubbed.
+  let redactionHits: RedactionHit[] | undefined;
+  let redactionTotalChars: number | undefined;
+  if (shouldRedact(opts.redact, opts.noRedact, redactConfig)) {
+    const rules = buildRules(redactConfig);
+    const result = redact(text, rules);
+    text = result.redacted;
+    redactionHits = result.hits;
+    redactionTotalChars = result.totalChars;
+    if (verbose && result.hits.length > 0) {
+      process.stderr.write(
+        `[redact] ${formatAuditTrail(result.hits)} (${result.totalChars} chars)\n`
+      );
+    }
+  }
 
   const actualDate = new Date(conversation.meta.modifiedAt)
     .toISOString()
@@ -464,7 +530,8 @@ export async function extractMemories(
   if (chunks.length === 1) {
     const prompt = buildExtractionPrompt(chunks[0], opts.types, actualDate, existingTitles);
     const result = await callLLM(prompt, config, verbose);
-    raw = parseExtractionResult(result, conversation);
+    // Single-chunk: apply same within-conversation dedup as multi-chunk
+    raw = deduplicateMemories(parseExtractionResult(result, conversation));
   } else {
     const total = chunks.length;
     let done = 0;
@@ -488,18 +555,28 @@ export async function extractMemories(
 
   const { memories: filtered, stats } = qualityFilter(raw);
 
+  // Cross-type subsumption: drop TODOs that are sub-steps of a same-extraction anchor
+  const beforeSubsumption = filtered.length;
+  const afterSubsumption = deduplicateSubsumedTodos(filtered);
+  stats.filteredSubsumed = beforeSubsumption - afterSubsumption.length;
+
   // Cross-extraction dedup: remove new memories that already exist on disk
-  const beforeCrossDedup = filtered.length;
-  const memories = deduplicateAgainstExisting(filtered, existingMemories);
+  const beforeCrossDedup = afterSubsumption.length;
+  const memories = deduplicateAgainstExisting(afterSubsumption, existingMemories);
   stats.filteredExistingDup = beforeCrossDedup - memories.length;
   stats.kept = memories.length;
 
-  const dropped = stats.filteredShort + stats.filteredDuplicate + stats.filteredVague + stats.filteredExistingDup;
+  const dropped = stats.filteredShort + stats.filteredDuplicate + stats.filteredVague + stats.filteredSubsumed + stats.filteredExistingDup;
   if (dropped > 0 && verbose) {
     process.stderr.write(
-      `[quality] ${dropped} filtered (${stats.filteredShort} short, ${stats.filteredDuplicate} title≈content, ${stats.filteredVague} vague, ${stats.filteredExistingDup} existing dup)\n`
+      `[quality] ${dropped} filtered (${stats.filteredShort} short, ${stats.filteredDuplicate} title≈content, ${stats.filteredVague} vague, ${stats.filteredSubsumed} subsumed-todo, ${stats.filteredExistingDup} existing dup)\n`
     );
   }
 
-  return { memories, qualityStats: stats };
+  return {
+    memories,
+    qualityStats: stats,
+    ...(redactionHits ? { redactionHits } : {}),
+    ...(redactionTotalChars !== undefined ? { redactionTotalChars } : {}),
+  };
 }

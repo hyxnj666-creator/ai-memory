@@ -169,6 +169,108 @@ export async function getFileHistory(
   }
 }
 
+// ---------- Bulk commit scanner (for `ai-memory link`) ----------
+
+export interface CommitWithPaths {
+  /** Short SHA (7+ chars). */
+  sha: string;
+  /** Full 40-char SHA. */
+  fullSha: string;
+  /** ISO 8601 author date. */
+  date: string;
+  /** Author name. */
+  author: string;
+  /** Commit subject (first line). */
+  subject: string;
+  /** Commit body (may be empty). */
+  body: string;
+  /** Repo-relative paths touched by this commit. */
+  paths: string[];
+}
+
+const BULK_FORMAT = `--pretty=format:BCOMMIT%x09%H%x09%h%x09%aI%x09%an%x09%s%x0A%b%x09END_BODY`;
+
+/**
+ * Get recent commits (newest first) with their changed file paths.
+ * Used by `ai-memory link` to build the scoring corpus.
+ * Returns an empty array on any failure (not in a git repo, git missing, etc.).
+ */
+export async function getRecentCommits(
+  cwd: string,
+  since = "30 days ago",
+  maxCount = 200
+): Promise<CommitWithPaths[]> {
+  try {
+    const r = await execFile(
+      "git",
+      [
+        "log",
+        "--name-only",
+        `--since=${since}`,
+        `--max-count=${maxCount}`,
+        `--format=BCOMMIT%x09%H%x09%h%x09%aI%x09%an%x09%s%x0ABODY_START%n%b%nBODY_END`,
+      ],
+      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER }
+    );
+    return parseBulkLog(r.stdout);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse the raw stdout of `git log --name-only --format=BCOMMIT\t%H\t%h\t%aI\t%an\t%s\nBODY_START\n%b\nBODY_END`.
+ * Pure function — no I/O, easy to unit test.
+ */
+export function parseBulkLog(stdout: string): CommitWithPaths[] {
+  const commits: CommitWithPaths[] = [];
+  let current: CommitWithPaths | null = null;
+  let inBody = false;
+  let bodyLines: string[] = [];
+
+  for (const raw of stdout.split("\n")) {
+    if (raw.startsWith("BCOMMIT\t")) {
+      // Flush previous
+      if (current) {
+        current.body = bodyLines.join("\n").trim();
+        commits.push(current);
+      }
+      bodyLines = [];
+      inBody = false;
+
+      const parts = raw.split("\t");
+      // [BCOMMIT, fullSha, sha, date, author, ...subjectParts]
+      if (parts.length < 6) { current = null; continue; }
+      const [, fullSha, sha, date, author, ...rest] = parts;
+      current = { sha, fullSha, date, author, subject: rest.join("\t"), body: "", paths: [] };
+      continue;
+    }
+
+    if (!current) continue;
+
+    if (raw === "BODY_START") { inBody = true; continue; }
+    if (raw === "BODY_END") { inBody = false; continue; }
+
+    if (inBody) {
+      bodyLines.push(raw);
+      continue;
+    }
+
+    // After BODY_END we get the --name-only paths (blank-line-separated from header)
+    const trimmed = raw.trim();
+    if (trimmed && !trimmed.startsWith("BCOMMIT")) {
+      current.paths.push(trimmed);
+    }
+  }
+
+  if (current) {
+    current.body = bodyLines.join("\n").trim();
+    commits.push(current);
+  }
+
+  return commits;
+}
+
 /**
  * True iff git tracks at least one file under `dir` (relative to `cwd`).
  * Used by `recall` to distinguish "we're in a git repo but the user hasn't

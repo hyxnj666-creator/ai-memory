@@ -1,0 +1,79 @@
+{
+  "id": "cceb-018-observability-otel",
+  "description": "12-turn long conversation; produces architecture (OTel pipeline) + convention (trace context propagation) + 1 explicit follow-up TODO. Should NOT inflate to 5+ memories.",
+  "difficulty": "hard",
+  "tags": ["architecture", "convention", "todo", "multi-memory", "long"],
+  "conversation": {
+    "title": "Designing the observability stack",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Let's lock down our observability story. Today we have Datadog APM in three services and unstructured stdout logs everywhere else. Tracing is patchy — half the trace IDs don't propagate across service boundaries. Need a coherent picture before we add the next 5 services."
+      },
+      {
+        "role": "assistant",
+        "text": "What's your appetite for vendor lock vs ops cost? The two coherent paths are: (a) all-in on Datadog APM + Logs + RUM (low ops, vendor-locked, expensive at scale), or (b) OpenTelemetry as the instrumentation layer with backends-as-replaceable (Datadog today, swap to Grafana Tempo/Loki/Mimir or Honeycomb later without re-instrumentation)."
+      },
+      {
+        "role": "user",
+        "text": "Path (b) — we want the option to move backends in 18 months. What does that concretely look like?"
+      },
+      {
+        "role": "assistant",
+        "text": "Three layers: (1) instrumentation — every service uses the OTel SDK for its language, no Datadog-native libraries; (2) collection — an OTel Collector deployed as a sidecar (or DaemonSet on Kubernetes) that batches spans/metrics/logs and forwards them; (3) backend — collector ships to Datadog today via the Datadog exporter. Future swap is a config change in the collector, no code change in services."
+      },
+      {
+        "role": "user",
+        "text": "What about logs? We have unstructured stdout logs."
+      },
+      {
+        "role": "assistant",
+        "text": "Move to structured (JSON) logs at the same time you adopt OTel — the two efforts share most of the work. Use OpenTelemetry's logs SDK so logs flow through the same collector and inherit the trace_id/span_id automatically. Then a click in any tracing UI takes you to the logs for that exact request."
+      },
+      {
+        "role": "user",
+        "text": "And the trace-propagation gaps?"
+      },
+      {
+        "role": "assistant",
+        "text": "Those are usually the boundaries between services that don't share an HTTP middleware. The OTel-recommended fix is to enforce W3C `traceparent` header propagation at every service ingress + egress. As a rule it has to be 'every', not 'most' — a single non-propagating service in a hot path means the whole downstream graph loses correlation."
+      },
+      {
+        "role": "user",
+        "text": "Alright. Architecture: we adopt OpenTelemetry as the instrumentation layer, OTel Collector as the egress sidecar, Datadog as the backend (initially). Logs move to structured JSON at the same time. Convention: every service must propagate the W3C `traceparent` header at ingress and egress — non-propagating services are not allowed to merge. Follow-up TODO: I'll create a tracked story to migrate the three Datadog-native-instrumented services off the native libs onto OTel; owner = me, deadline = end of next sprint."
+      },
+      {
+        "role": "assistant",
+        "text": "Solid. One more thing worth pinning while it's fresh: pick a sampling strategy in the collector before you turn the firehose on. Tail-based sampling at the collector layer (keep all errored traces + 5% of successful) is the standard pick; head-based sampling at the SDK throws away too much before the system has seen enough of the trace to know if it's interesting."
+      },
+      {
+        "role": "user",
+        "text": "Good catch — tail-based, keep-all-errors + 5% success. Adding that to the architecture."
+      },
+      {
+        "role": "assistant",
+        "text": "And on the migration TODO: when you scope the story, the order that minimizes pain is service-by-service rather than parallel — finish one service end-to-end (instrumentation swap, logs structuring, header-propagation verified in a real trace) before starting the next, so each migration's debug session is bounded."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-otel-pipeline",
+      "type": "architecture",
+      "must_contain": ["OpenTelemetry"],
+      "note": "ONE architecture memory: OTel SDK + OTel Collector + Datadog backend. The 'tail-based sampling' detail is part of this architecture, not a separate memory."
+    },
+    {
+      "id": "convention-traceparent-propagation",
+      "type": "convention",
+      "must_contain": ["traceparent"],
+      "note": "Forward-looking rule: every service must propagate the W3C traceparent header at ingress + egress. Distinct from the architecture memory."
+    },
+    {
+      "id": "todo-migrate-datadog-native",
+      "type": "todo",
+      "must_contain": ["migrate"],
+      "note": "Explicit committed follow-up: migrate three Datadog-native-instrumented services to OTel. Has owner (the speaker) + deadline (end of next sprint) + scope. The structured-log migration is part of the architecture, NOT a second TODO."
+    }
+  ]
+}

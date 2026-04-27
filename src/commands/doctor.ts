@@ -86,13 +86,18 @@ export function checkPlatform(): CheckResult {
  * Map a conversation file path to the directory the user would recognise
  * when reading `doctor` output, accounting for source-specific layout:
  *
- *   - cursor:      `…/agent-transcripts/<uuid>/<uuid>.jsonl` — strip 2 segments
+ *   - cursor:      `…/agent-transcripts/<uuid>/<uuid>.jsonl`        — strip 2 segments
  *                  so we land on `…/agent-transcripts/`. Stripping just one
  *                  leaves a noisy `<uuid>/` directory that means nothing to
  *                  the user and prompted a "what is this UUID folder?" report.
- *   - claude-code: `<projectDir>/<uuid>.jsonl`             — strip 1 segment
- *   - copilot:     `<chatDir>/<uuid>.json`                 — strip 1 segment
- *   - windsurf:    `<dir>/state.vscdb`                     — strip 1 segment
+ *   - codex:       `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`   — strip 4 segments
+ *                  so we land on `~/.codex/sessions/`. The `YYYY/MM/DD/`
+ *                  partitioning is an internal index, not a directory the
+ *                  user would name themselves; same lesson as the Cursor
+ *                  v2.4 fix — show the path the user would recognise.
+ *   - claude-code: `<projectDir>/<uuid>.jsonl`                      — strip 1 segment
+ *   - copilot:     `<chatDir>/<uuid>.json`                          — strip 1 segment
+ *   - windsurf:    `<dir>/state.vscdb`                              — strip 1 segment
  *
  * Returns the original input on no separator (defensive — should not happen
  * because every real source produces an absolute path).
@@ -105,8 +110,13 @@ export function conversationDisplayDir(
     const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
     return idx === -1 ? p : p.slice(0, idx);
   };
-  const once = stripOne(filePath);
-  return sourceType === "cursor" ? stripOne(once) : once;
+  let path = stripOne(filePath);
+  const stripCount: number =
+    sourceType === "cursor" ? 1 : sourceType === "codex" ? 3 : 0;
+  for (let i = 0; i < stripCount; i++) {
+    path = stripOne(path);
+  }
+  return path;
 }
 
 export interface EditorDetectionItem {
@@ -583,7 +593,13 @@ function pickNextStep(ctx: {
   llmConfigured: boolean;
 }): string {
   if (!ctx.llmConfigured) {
-    return "Set an API key (see `LLM connectivity` fix above), then re-run `ai-memory doctor`.";
+    // Two paths from here: (a) zero-friction demo to see what ai-memory
+    // produces against a curated store (no key required), or (b) the
+    // real path of setting a key + re-running doctor. We list (a) first
+    // because the most common reason for landing here is "I just ran
+    // doctor before deciding whether to invest in setup" — `try` is the
+    // 30-second answer.
+    return "Run `ai-memory try` for a no-API-key demo, or set an API key (see `LLM connectivity` fix above) and re-run `ai-memory doctor`.";
   }
   if (ctx.store.memoryCount === 0) {
     return "Run `ai-memory extract` to extract memories from your conversations.";

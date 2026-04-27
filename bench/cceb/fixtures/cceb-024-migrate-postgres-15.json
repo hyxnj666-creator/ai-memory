@@ -1,0 +1,35 @@
+{
+  "id": "cceb-024-migrate-postgres-15",
+  "description": "TODO with all three v2.5-01 commitment gates: explicit owner, scope+done-criteria, and a deadline",
+  "difficulty": "easy",
+  "tags": ["todo", "single-memory", "commitment-deadline"],
+  "conversation": {
+    "title": "Postgres 15 → 16 upgrade scheduling",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Production Postgres is on 15.4. Postgres 16 has been out for over a year and we're starting to see deprecation warnings on a couple of dependencies. When should we upgrade?"
+      },
+      {
+        "role": "assistant",
+        "text": "16 has been stable for the use cases you have (mainly logical replication + better query planner for windowed analytics). The standard PG major-version upgrade path is `pg_upgrade` with a brief read-only window, or — if you can afford the operational cost — a logical-replication blue-green cutover with zero downtime. For a database your size (under 500 GB), `pg_upgrade` in a 30-minute maintenance window is usually fine."
+      },
+      {
+        "role": "user",
+        "text": "TODO for me: schedule + execute the Postgres 15.4 → 16 upgrade in production. Owner: me (Maria). Done when prod is on 16, replicas are on 16, all extension versions are confirmed compatible, and we've run a 24-hour soak with the rollback plan rehearsed. Deadline: end of Q2 (June 30) — needs to land before the analytics-team's quarterly reporting window so we have at least four weeks of post-upgrade observation before it gets stress-tested."
+      },
+      {
+        "role": "assistant",
+        "text": "Clean TODO. One pre-flight item that bites at this version boundary: `pg_repack` extension changed its compatibility surface between 14 and 16, so verify the version of `pg_repack` you have works with 16 *before* the upgrade window — otherwise your rollback plan also needs a `pg_repack` swap, which doubles the moving parts."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "todo-postgres-16-upgrade",
+      "type": "todo",
+      "must_contain": ["Postgres"],
+      "note": "Explicit committed TODO. Owner = Maria, deadline = June 30, scope + done-criteria all stated. All three v2.5-01 commitment gates triggered. The pg_repack pre-flight is a sub-item of done-criteria, NOT a second TODO."
+    }
+  ]
+}

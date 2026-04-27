@@ -9,6 +9,7 @@ import {
   writeProjectMcpConfigs,
   type WriteResult,
 } from "../mcp/config-writer.js";
+import { scheduleExtract, unscheduleExtract } from "../utils/scheduler.js";
 
 const CONFIG_PATH = ".ai-memory/.config.json";
 const GITIGNORE_ENTRIES = [".ai-memory/.state.json", ".ai-memory/.embeddings.json"];
@@ -122,7 +123,24 @@ export async function runInit(opts: CliOptions): Promise<number> {
     }
   }
 
-  // 6. Next steps
+  // 6. Scheduler (--schedule / --unschedule)
+  let scheduleResult: Awaited<ReturnType<typeof scheduleExtract>> | undefined;
+  if (opts.unschedule) {
+    await unscheduleExtract();
+    if (!opts.json) console.log(`[−] Scheduled task removed.`);
+  } else if (opts.schedule) {
+    scheduleResult = await scheduleExtract();
+    if (!opts.json) {
+      if ("error" in scheduleResult) {
+        console.log(`[!] Schedule failed: ${scheduleResult.error}`);
+      } else {
+        const verb = scheduleResult.action === "already-exists" ? "already registered" : scheduleResult.action;
+        console.log(`[+] Schedule ${verb} → ${scheduleResult.target}`);
+      }
+    }
+  }
+
+  // 7. Next steps
   if (!opts.json) {
     console.log(`
 Next steps:
@@ -144,6 +162,7 @@ Next steps:
         detected: available.map((s) => s.type),
         configPath: CONFIG_PATH,
         gitignoreUpdated: updated,
+        schedule: scheduleResult,
         mcp: mcpResults?.map((r) => ({
           label: r.target.label,
           path: r.target.configPath,

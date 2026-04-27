@@ -3,6 +3,7 @@ import { CursorSource } from "./cursor.js";
 import { ClaudeCodeSource } from "./claude-code.js";
 import { WindsurfSource } from "./windsurf.js";
 import { CopilotSource } from "./copilot.js";
+import { CodexSource } from "./codex.js";
 
 interface DetectionResult {
   available: Source[];
@@ -17,6 +18,7 @@ export async function detectSources(
     new ClaudeCodeSource(),
     new WindsurfSource(),
     new CopilotSource(),
+    new CodexSource(),
   ];
 
   const available: Source[] = [];
@@ -47,6 +49,8 @@ export function createSource(
       return new WindsurfSource();
     case "copilot":
       return new CopilotSource();
+    case "codex":
+      return new CodexSource();
     default:
       throw new Error(`Source type "${type}" is not yet supported`);
   }
@@ -57,6 +61,7 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   "claude-code": "Claude Code",
   windsurf: "Windsurf",
   copilot: "VS Code Copilot",
+  codex: "Codex CLI",
 };
 
 export function sourceLabel(type: SourceType): string {

@@ -1,6 +1,6 @@
 // --- Data Source Types ---
 
-export type SourceType = "cursor" | "claude-code" | "windsurf" | "copilot";
+export type SourceType = "cursor" | "claude-code" | "windsurf" | "copilot" | "codex";
 
 export interface ConversationMeta {
   id: string;
@@ -33,6 +33,35 @@ export type MemoryType =
   | "todo"
   | "issue";
 
+// --- Memory ↔ Commit linking (v2.6) ---
+
+export interface ImplementationLink {
+  /** Full 40-char SHA. */
+  sha: string;
+  /** Short SHA (cached for display). */
+  short: string;
+  /** Repo-relative paths the commit touched that matched the memory's tokens. */
+  paths: string[];
+  /** Commit subject. */
+  subject: string;
+  /** Commit author name. */
+  author: string;
+  /** Commit author date (ISO 8601). */
+  date: string;
+  /** Similarity algorithm used. */
+  method: "jaccard";
+  /** Weighted Jaccard score (0–1). */
+  score: number;
+  /** How the link was established. */
+  confirmed_by: "auto" | "manual";
+  /** ISO 8601 timestamp of when the link was first recorded. */
+  first_linked: string;
+}
+
+export interface MemoryLinks {
+  implementations: ImplementationLink[];
+}
+
 export interface ExtractedMemory {
   type: MemoryType;
   title: string;
@@ -52,12 +81,14 @@ export interface ExtractedMemory {
   status?: "active" | "resolved";
   /** File path on disk (populated when reading) */
   filePath?: string;
+  /** Implementation commit links (v2.6+). Populated by `ai-memory link`. */
+  links?: MemoryLinks;
 }
 
 // --- CLI Types ---
 
 export interface CliOptions {
-  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "recall" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "dashboard" | "export" | "import" | "doctor" | "help" | "version";
+  command: "extract" | "summary" | "context" | "init" | "list" | "search" | "recall" | "rules" | "resolve" | "serve" | "reindex" | "watch" | "dashboard" | "export" | "import" | "doctor" | "try" | "link" | "help" | "version";
   source?: SourceType;
   since?: string;
   incremental?: boolean;
@@ -112,8 +143,38 @@ export interface CliOptions {
   noLlmCheck?: boolean;
   /** Write `.cursor/mcp.json` + `.windsurf/mcp.json` during `init` (v2.4+) */
   withMcp?: boolean;
-  /** Output target for `rules` command (v2.4+). Default: cursor-rules. */
-  target?: "cursor-rules" | "agents-md" | "both";
+  /** Output target for `rules` command (v2.4+ adds agents-md/both; v2.5-04 adds skills). Default: cursor-rules. */
+  target?: "cursor-rules" | "agents-md" | "skills" | "both";
+  /** Keep the bundled-scenario tmp dir after `try` instead of deleting (v2.5+). */
+  keep?: boolean;
+  /**
+   * Enable redaction of secrets / PII / internal hostnames before sending
+   * conversation text to the LLM (extract / summary / context --summarize).
+   * Default OFF in v2.5 (additive, opt-in). When undefined, falls back to
+   * `config.redact.enabled` (also `false` by default).
+   * See `docs/redaction-policy-2026-04-26.md` for the threat model + rule list.
+   */
+  redact?: boolean;
+  /** Explicit `--no-redact` overrides any config-level enable. */
+  noRedact?: boolean;
+  /**
+   * Register a daily `extract --incremental` cron/launchd/schtasks job for the
+   * current project directory. macOS → launchd, Linux → crontab, Windows → schtasks.
+   */
+  schedule?: boolean;
+  /** Remove the scheduled task previously created by `init --schedule`. */
+  unschedule?: boolean;
+  /**
+   * For `link` command: only scan commits from the last N days (or any git
+   * --since string, e.g. "7 days ago"). Default: "30 days ago".
+   */
+  linkSince?: string;
+  /** For `link` command: remove all auto-linked entries from every memory file. */
+  clearAuto?: boolean;
+  /** For `link` command: override the auto-link score threshold (0–1). */
+  autoThreshold?: number;
+  /** For `link` command: maximum commits to scan. Default 200. */
+  maxCommits?: number;
 }
 
 // --- Memory Bundle (export/import) ---
@@ -155,12 +216,47 @@ export interface MemoryBundle {
 
 // --- Config Types ---
 
+/**
+ * Per-rule redaction descriptor in `.ai-memory/.config.json`.
+ *
+ * `pattern` is a RegExp source string (NOT a literal-match string —
+ * fed to `new RegExp(pattern, "g")` at config load). The `g` flag is
+ * always added by us; users should NOT include flags in `pattern`.
+ *
+ * The `replacement` defaults to `<REDACTED:${name}>` if omitted. When
+ * `group: 1` is set, only capture group 1 is replaced (useful for
+ * patterns that need a lookbehind anchor visible in the regex but
+ * shouldn't be redacted, e.g. internal-hostname).
+ */
+export interface RedactRuleSpec {
+  name: string;
+  pattern: string;
+  replacement?: string;
+  group?: 1;
+}
+
+/**
+ * Redaction config block. See `docs/redaction-policy-2026-04-26.md`
+ * for the full threat model and the locked default rule list.
+ */
+export interface RedactConfig {
+  /** Master switch. CLI `--redact` / `--no-redact` overrides this. */
+  enabled?: boolean;
+  /** User-defined rules (validated at load; bad rules dropped with stderr warning). */
+  rules?: RedactRuleSpec[];
+  /** When false, user `rules` REPLACE the defaults instead of augmenting them. Default true. */
+  extendDefaults?: boolean;
+  /** Names of opt-in default rules to turn on (e.g. "jwt", "aws-secret-key"). */
+  enableOptional?: string[];
+}
+
 export interface AiMemoryConfig {
   sources: {
     cursor: { enabled: boolean; projectName?: string };
     claudeCode: { enabled: boolean };
     windsurf: { enabled: boolean };
     copilot: { enabled: boolean };
+    codex: { enabled: boolean };
   };
   extract: {
     types: MemoryType[];
@@ -177,6 +273,8 @@ export interface AiMemoryConfig {
   embeddingModel?: string;
   /** Author name for team mode (auto-detected from git if not set) */
   author?: string;
+  /** Redaction policy (v2.5-05+). When omitted, redaction is OFF. */
+  redact?: RedactConfig;
 }
 
 export const DEFAULT_CONFIG: AiMemoryConfig = {
@@ -185,6 +283,7 @@ export const DEFAULT_CONFIG: AiMemoryConfig = {
     claudeCode: { enabled: true },
     windsurf: { enabled: true },
     copilot: { enabled: true },
+    codex: { enabled: true },
   },
   extract: {
     types: ["decision", "architecture", "convention", "todo", "issue"],

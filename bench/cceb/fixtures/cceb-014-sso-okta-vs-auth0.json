@@ -1,0 +1,36 @@
+{
+  "id": "cceb-014-sso-okta-vs-auth0",
+  "description": "Three-way SSO vendor comparison resolved into one choice; pins the merge-don't-split instruction added in v2.5-01",
+  "difficulty": "hard",
+  "tags": ["decision", "single-memory", "multi-option", "sub-claim-trap"],
+  "conversation": {
+    "title": "SSO vendor selection for the customer portal",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We need to pick an SSO vendor for the new customer portal. Shortlist is Okta, Auth0, and WorkOS. Budget allows any of them. What are the actual trade-offs?"
+      },
+      {
+        "role": "assistant",
+        "text": "Three-way breakdown: Okta is the enterprise default — most of your B2B customers' IT teams will already have an Okta tenant, so SCIM provisioning + SAML handshakes are the cheapest path. Auth0 is the developer-friendly side of the same now-Okta company; great DX, lower price for low seats, but it positions itself as 'the auth your engineers like' rather than 'the IdP your enterprise customers expect'. WorkOS is the newest entrant; their pitch is 'one API for SSO + SCIM + Audit Logs' and they tend to win when the customer's IT team isn't part of the buying decision. For a B2B customer portal where the buyer IS the IT team, Okta is the boring correct answer."
+      },
+      {
+        "role": "user",
+        "text": "That maps to what we're seeing in sales calls. Going with Okta. Specifically: SAML 2.0 for SSO, SCIM 2.0 for user provisioning, both behind the standard Okta tenant. We accept the higher per-seat cost relative to Auth0 because the IT-team-recognition value outweighs it for our segment. Auth0 stays an option for future internal-tools auth where the buyer is engineering, but that's not a current decision."
+      },
+      {
+        "role": "assistant",
+        "text": "Good. The migration paths from your current cookie-session auth: Okta-side, you'll provision a SAML application + a SCIM-enabled directory connection; app-side, you add an Okta-Verify callback and replace the cookie-session middleware with their session-token verification. Plan ~2 sprints for the integration, with a careful cutover window because a misconfigured SAML response can lock everyone out simultaneously."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-okta-sso",
+      "type": "decision",
+      "must_contain": ["Okta"],
+      "must_not_contain": ["Auth0 chosen", "WorkOS chosen"],
+      "note": "ONE decision: Okta for customer-portal SSO. The SAML/SCIM details and the 'Auth0 may be reconsidered for internal tools' aside are part of impact/alternatives, NOT separate decisions. The trap is splitting into three memories (one per vendor evaluated)."
+    }
+  ]
+}

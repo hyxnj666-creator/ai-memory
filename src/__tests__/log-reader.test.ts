@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 
 import {
   parseGitLog,
+  parseBulkLog,
   isGitRepo,
   getFileHistory,
   isPathTracked,
@@ -106,6 +107,67 @@ describe("parseGitLog", () => {
     const r = parseGitLog(stdout);
     expect(r).toHaveLength(1);
     expect(r[0].change).toBe("other");
+  });
+});
+
+// ---------- parseBulkLog: pure ----------
+
+describe("parseBulkLog", () => {
+  it("returns [] for empty input", () => {
+    expect(parseBulkLog("")).toEqual([]);
+  });
+
+  it("parses a single commit with paths", () => {
+    const stdout = [
+      "BCOMMIT\tabcdef1234567890abcdef1234567890abcdef12\tabc1234\t2026-04-25T10:00:00+08:00\tconor\tship PKCE auth flow",
+      "BODY_START",
+      "Implement RFC 7636 PKCE for OAuth 2.0",
+      "BODY_END",
+      "src/auth/pkce.ts",
+      "src/auth/__tests__/pkce.test.ts",
+    ].join("\n");
+    const r = parseBulkLog(stdout);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      sha: "abc1234",
+      fullSha: "abcdef1234567890abcdef1234567890abcdef12",
+      subject: "ship PKCE auth flow",
+      author: "conor",
+      body: "Implement RFC 7636 PKCE for OAuth 2.0",
+    });
+    expect(r[0].paths).toContain("src/auth/pkce.ts");
+    expect(r[0].paths).toContain("src/auth/__tests__/pkce.test.ts");
+  });
+
+  it("parses two commits and keeps them in order", () => {
+    const stdout = [
+      "BCOMMIT\taaaa0000000000000000000000000000000000000\taaa0000\t2026-04-25T10:00:00Z\tconor\tFirst",
+      "BODY_START",
+      "BODY_END",
+      "src/a.ts",
+      "BCOMMIT\tbbbb0000000000000000000000000000000000000\tbbb0000\t2026-04-24T09:00:00Z\talice\tSecond",
+      "BODY_START",
+      "BODY_END",
+      "src/b.ts",
+    ].join("\n");
+    const r = parseBulkLog(stdout);
+    expect(r).toHaveLength(2);
+    expect(r[0].sha).toBe("aaa0000");
+    expect(r[1].sha).toBe("bbb0000");
+    expect(r[0].paths).toEqual(["src/a.ts"]);
+    expect(r[1].paths).toEqual(["src/b.ts"]);
+  });
+
+  it("handles commits with empty body gracefully", () => {
+    const stdout = [
+      "BCOMMIT\tcccc0000000000000000000000000000000000000\tccc0000\t2026-04-23T09:00:00Z\tbob\tchore: bump version",
+      "BODY_START",
+      "BODY_END",
+      "package.json",
+    ].join("\n");
+    const r = parseBulkLog(stdout);
+    expect(r[0].body).toBe("");
+    expect(r[0].paths).toEqual(["package.json"]);
   });
 });
 

@@ -14,7 +14,7 @@ finished editor conversations as their primary input.
 
 This is the asymmetry the v2.4 launch is built around: same git-markdown
 storage everyone else has converged on, but a totally different *input* —
-your already-existing Cursor/Claude/Windsurf/Copilot chat logs.
+your already-existing Cursor/Claude/Windsurf/Copilot/Codex CLI chat logs.
 
 ## Three-bucket competitive map
 
@@ -31,7 +31,7 @@ to read. The three-bucket view below is now canonical (per
 
 | Project | Stars | Input source | Output | Notes |
 |---|---|---|---|---|
-| **`ai-memory-cli` (us)** | (launching) | Cursor + Claude Code + Windsurf + VS Code Copilot chat history | 5 typed Markdown memory categories + Cursor Rules + AGENTS.md (v2.4) | The only project in this bucket as of 2026-04-25 |
+| **`ai-memory-cli` (us)** | (launching) | Cursor + Claude Code + Windsurf + VS Code Copilot + Codex CLI chat history | 5 typed Markdown memory categories + Cursor Rules + AGENTS.md + Anthropic Skills (v2.5) | The only project in this bucket as of 2026-04-26 |
 
 This bucket is empty besides us. Most "AI memory" projects are runtime
 middleware (Bucket 2 / 3); the ones that read editor data, like
@@ -64,7 +64,7 @@ the storage format.
 
 | Project | Stars | Storage | Defining trait |
 |---|---|---|---|
-| **`memory-graph/memory-graph`** | **191** (niche leader) | Graph DB | Tracks intelligent relationships across memories. Multi-editor (Cursor/Claude/Windsurf/Copilot) but graph-first |
+| **`memory-graph/memory-graph`** | **191** (niche leader) | Graph DB | Tracks intelligent relationships across memories. Multi-editor (Cursor/Claude/Windsurf/Copilot, no Codex) but graph-first |
 | **`alphaonedev/ai-memory-mcp`** | — | SQLite FTS5 | "97.8% R@5 on LongMemEval", TOON token reduction |
 | **`tstockham96/engram`** | ~35 | TS + MCP | "80% LOCOMO with 93.6% fewer tokens", explicit/implicit/synthesised memory tiers |
 | **`jasondostal/cairn-mcp`** | ~50-200 | PostgreSQL + pgvector + Neo4j | Semantic-episodic, HDBSCAN clustering, 4-container Docker |
@@ -91,10 +91,10 @@ the storage format.
 
 | Axis | `ai-memory-cli` | Bucket 2 (git-markdown runtime) | Bucket 3 (opaque-DB runtime) |
 |---|---|---|---|
-| **Primary input** | Cursor/Claude/Windsurf/Copilot **chat history**, automatically | `add()` / `remember()` calls from host agent | `add()` / `remember()` calls from host agent |
+| **Primary input** | Cursor/Claude/Windsurf/Copilot/Codex CLI **chat history**, automatically | `add()` / `remember()` calls from host agent | `add()` / `remember()` calls from host agent |
 | **Storage** | Plain Markdown, one file per memory, PR-reviewable | Markdown + small SQLite/index | SQLite / pgvector / Neo4j / graph DB (opaque) |
 | **Knowledge typing** | 5 typed categories (decision / architecture / convention / todo / issue), each with its own prompt + filter | Single memory blob | Single stream or graph relationships |
-| **Editor coverage** | 4 editors simultaneously (Cursor + Claude + Windsurf + Copilot) | 1-3 editors via MCP | 1-3 editors via MCP; only `memory-graph` covers all 4 |
+| **Editor coverage** | 5 editors simultaneously (Cursor + Claude + Windsurf + Copilot + Codex CLI, v2.5-06) | 1-3 editors via MCP | 1-3 editors via MCP; only `memory-graph` covers all 4 (no Codex) |
 | **Rules export** | `.cursor/rules/*.mdc` + `AGENTS.md` (v2.4) + CLAUDE.md (v2.4) | `cortexmem` writes `.cursorrules` + `CLAUDE.md` | None |
 | **Conversation scoping** | `--source-id` / `--convo` / `--list-sources` (v2.3) | Retrieval-only | Retrieval-only |
 | **Portability** | Idempotent JSON `export`/`import` bundle (v2.3) | "Rsync your SQLite file" | "Rsync your SQLite file" |
@@ -138,17 +138,52 @@ the storage format.
 
 | Benchmark | Status | What it measures | Why we ship it |
 |---|---|---|---|
-| **CCEB** (Cursor Conversation Extraction Benchmark) — primary | v2.4 work item | Precision / Recall / F1 of typed extraction on annotated real Cursor + Claude chat logs | Measures what our pipeline actually optimises for. Inventing the benchmark for our own niche is itself a category-leadership signal |
-| **LongMemEval 50-query subset** — secondary | v2.4 work item | Industry-recognised long-term memory recall accuracy | Three direct-bucket competitors publish numbers (alphaonedev 97.8% R@5, memento-memory 90.8%, engram 80% on LOCOMO). Skipping it reads as "untested toy" |
+| **CCEB** (Cursor Conversation Extraction Benchmark) — primary | v1.1 baseline live 2026-04-27 `gpt-4o-mini`, **30 fixtures**: **P 56.8 / R 73.5 / F1 64.1** (v1.0 / 9-fixture row: F1 76.2 still in [baseline doc](benchmarks/cceb-baseline.md) for delta-tracking) | Precision / Recall / F1 of typed extraction on annotated synthetic Cursor + Claude chat logs | Measures what our pipeline actually optimises for. Inventing the benchmark for our own niche is itself a category-leadership signal |
+| **LongMemEval 50-query subset** — secondary | live run 2026-04-27 `gpt-4o-mini`: **0 / 50 full + 2 / 50 partial** evidence preserved | **Evidence preservation proxy** — fraction of LongMemEval `answer` key tokens that survive into our extracted memories. **Not** native QA correctness | Three direct-bucket competitors publish LongMemEval-style numbers (alphaonedev 97.8% R@5, memento-memory 90.8%, engram 80% on LOCOMO). Shipping our 0/50 + 2/50 *with the rubric attached* cuts off "unmeasured toy" critique while honestly disclosing that our metric is scoped to the extraction surface, not their runtime QA surface |
 
-CCEB scope: ≥30 annotated conversations, balanced across the 5 memory types,
-released as a separate `bench/cceb/` directory with dataset + runner +
-scorecard. Anyone can fork the repo and reproduce.
+CCEB scope: 30 annotated conversations as of v1.1 (cceb-001 — cceb-030),
+balanced across the 5 memory types plus 3 noise/boundary cases, released
+in `bench/cceb/fixtures/` with runner + scorecard. Anyone can fork the
+repo and reproduce. Roster locked in
+[`docs/cceb-v1.1-and-longmemeval-spike-2026-04-27.md`](cceb-v1.1-and-longmemeval-spike-2026-04-27.md).
 
-LongMemEval subset scope: 50 queries, scored against our `recall` /
-`search_memories` MCP tools (not our extractor — different category). Methodology
-disclosed honestly: this is testing the *runtime retrieval surface* of
-ai-memory, while CCEB tests the *extraction surface*.
+LongMemEval subset scope: a deterministically selected 50-question slice
+of [`xiaowu0162/LongMemEval`](https://github.com/xiaowu0162/LongMemEval)
+(`longmemeval_s_cleaned.json`), scored against the **extracted memory
+text** produced by `extract` — *not* against our `recall` /
+`search_memories` MCP tools. The metric is intentionally a proxy: for
+each question, we check how many normalised key tokens from the
+LongMemEval `answer` survive as substrings in the concatenated
+`title + content + reasoning + alternatives + impact` of our extracted
+memories. This tests whether the extraction stage *preserves the
+evidence* a downstream retriever would need; native QA correctness on
+LongMemEval is a different system (live retriever + re-ranker + answer
+generator) and out of scope for `ai-memory` v2.5. The proxy framing,
+including the conceptual mismatch with competitor numbers, is disclosed
+on every published scorecard.
+
+The 2026-04-27 baseline run came in at **0 / 50 full + 2 / 50 partial**
+on `gpt-4o-mini`. Two notes on reading that number alongside the
+competitor 80-97% headlines in the table above:
+
+1. **Different rubrics.** alphaonedev's 97.8% is `recall@5` on a
+   live retriever (top-5 of returned chunks contains the gold answer
+   span); memento-memory's 90.8% is full LongMemEval QA-correctness
+   with their retriever + answer pipeline; engram's 80% is LOCOMO
+   F1 (the longer-context cousin of LongMemEval). Our 0/50 is
+   "every key token of the answer must appear as a literal substring
+   in our extracted memory text," with no retriever and no answer
+   generator in the loop. They're not the same number; that's the
+   honesty cost we're choosing to pay.
+2. **Direction over magnitude.** The per-question matched/total
+   counts in the [baseline doc](benchmarks/cceb-baseline.md#longmemeval-50--gpt-4o-mini--2026-04-27-v25-08-evidence-preservation-rubric)
+   show real partial signal on `single-session-preference`
+   (3-6 of 17-43 tokens consistently); the rubric is strict enough
+   that the 0/50 is the rubric correctly reporting "extractor over
+   single-pass-conversation rarely captures every literal token of
+   an open-domain user fact." We're pointed at typed-schema
+   engineering chat (CCEB), not open-domain conversation QA — the
+   0/50 is the price of being honest about that scope.
 
 ## What recent HN launches teach us
 
@@ -165,9 +200,24 @@ Lessons baked into the v2.4 launch plan:
 3. **Benchmark numbers are the single biggest credibility lever.** Three
    competitors lead with one. Shipping ours (both CCEB and LongMemEval)
    immediately cuts off the "unmeasured toy" critique.
-4. **Multi-editor coverage is no longer unique.** memory-graph covers the
-   same four editors. Differentiate on what the editors *give* us
+4. **Multi-editor coverage is no longer unique on its own.** memory-graph
+   covers the same four IDE editors (Cursor / Claude / Windsurf /
+   Copilot). v2.5-06 added Codex CLI as a 5th source, putting us one
+   ahead, but the lead is small enough that "5 editors" is a feature
+   detail, not the wedge. Differentiate on what the editors *give* us
    (chat history) rather than the count.
+5. **The "1M-token context obsoletes you" objection.** Frontier model
+   context windows hit 1M tokens during the v2.4 cycle and the question
+   shows up on every memory-tool HN thread. Our standing answer is the
+   FAQ section in README.md ("Doesn't 1M-token context obsolete you?")
+   — three claims, all hyperlink-cited: cost compounds per-query while
+   extraction amortises; long-context retrieval still degrades on
+   non-headline information past ~128–256K tokens
+   ([Liu et al. 2023](https://arxiv.org/abs/2307.03172),
+   [BABILong 2024](https://arxiv.org/abs/2406.10149)); long context is
+   per-machine while `AGENTS.md` is per-repo. Spike + re-spike triggers
+   in [`docs/1m-context-faq-spike-2026-04-27.md`](1m-context-faq-spike-2026-04-27.md).
+   Don't re-argue here — link to the FAQ.
 
 ## How this doc is maintained
 

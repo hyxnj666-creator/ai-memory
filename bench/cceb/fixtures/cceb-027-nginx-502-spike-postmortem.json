@@ -1,0 +1,35 @@
+{
+  "id": "cceb-027-nginx-502-spike-postmortem",
+  "description": "Standard incident-postmortem shape: issue with rootcause + fix + impact, all in one memory",
+  "difficulty": "medium",
+  "tags": ["issue", "single-memory", "incident"],
+  "conversation": {
+    "title": "Postmortem on this morning's nginx 502 spike",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Walk me through what happened with the 502 spike at 09:14 UTC this morning so I can write the postmortem. Looks like 4 minutes of customer-facing 502s, ~12% of requests during the window."
+      },
+      {
+        "role": "assistant",
+        "text": "Sequence as I reconstruct it: at 09:13:47 the api-service pod scaled up by two replicas in response to a traffic uptick. Nginx upstream config got reloaded (the standard side-effect of the new endpoints landing in DNS). Between 09:14:02 and 09:18:11, those two new pods passed Kubernetes readiness probes (which check `/healthz`) but couldn't actually serve `/api/*` because the in-process cache they need had not finished warming. Nginx routed `/api/*` traffic to them and got connection refusals → 502. At 09:18:11 cache-warming completed, 502s stopped. So: rootcause is a misalignment between the readiness-probe path and the cache-dependency of the actual traffic path. Same condition existed every previous scale-up; we got lucky on cache-warm timing for ~6 weeks."
+      },
+      {
+        "role": "user",
+        "text": "Got it. Issue write-up: 'API returned 502 for ~12% of requests for ~4 minutes during a routine scale-up event.' Severity: customer-facing, sev-2. Rootcause: readiness probe at `/healthz` passed before cache warming completed, so nginx routed to pods that couldn't serve `/api/*`. Fix: change readiness probe to a `/ready` endpoint that returns 200 only after cache warming completes; the `/healthz` endpoint stays for liveness. Impact: 4 minutes of 502s, no data loss, all in-flight requests retried successfully on the second client attempt. Status: resolved with the new readiness probe deployed at 11:40 UTC."
+      },
+      {
+        "role": "assistant",
+        "text": "Clean writeup. One follow-up worth adding to the impact / lessons: the same pattern (readiness probe ≠ traffic-readiness) likely exists in two other services that also have warmup work — the recommendation engine and the search service. Worth a tracked story to audit both, even though they haven't 502'd yet, because the probability they will eventually scale-up at an unlucky cache-warm time is non-zero."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "issue-nginx-502-readiness",
+      "type": "issue",
+      "must_contain": ["502"],
+      "note": "ONE issue memory: 502 spike with rootcause + fix + impact all in the same artefact. The `/ready` endpoint and the resolved-status are part of the issue, not separate memories. The audit-other-services follow-up is part of impact, NOT a TODO."
+    }
+  ]
+}

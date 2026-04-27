@@ -145,9 +145,33 @@ describe("conversationDisplayDir", () => {
     ).toBe("/home/u/.codeium/windsurf");
   });
 
+  // v2.5-06: Codex sessions live under YYYY/MM/DD partitioning that the user
+  // doesn't recognise as a directory they would name themselves. Stripping
+  // just one segment leaves a noisy `…/sessions/2026/04/26` display, which
+  // would prompt the same "what is this date folder?" report the cursor fix
+  // closed in v2.4. Strip 4 segments so doctor lands on `…/sessions`.
+  it("strips four segments for codex (sessions/YYYY/MM/DD/rollout-*.jsonl)", () => {
+    expect(
+      conversationDisplayDir(
+        "/home/u/.codex/sessions/2026/04/26/rollout-2026-04-26T10-00-00-aaa.jsonl",
+        "codex"
+      )
+    ).toBe("/home/u/.codex/sessions");
+  });
+
+  it("works on Windows backslash separators for codex", () => {
+    expect(
+      conversationDisplayDir(
+        "C:\\Users\\u\\.codex\\sessions\\2026\\04\\26\\rollout-2026-04-26T10-00-00-aaa.jsonl",
+        "codex"
+      )
+    ).toBe("C:\\Users\\u\\.codex\\sessions");
+  });
+
   it("returns the input unchanged when there is no separator (defensive — should not happen for real source-emitted paths, all of which are absolute)", () => {
     expect(conversationDisplayDir("nofile", "cursor")).toBe("nofile");
     expect(conversationDisplayDir("nofile", "claude-code")).toBe("nofile");
+    expect(conversationDisplayDir("nofile", "codex")).toBe("nofile");
   });
 });
 

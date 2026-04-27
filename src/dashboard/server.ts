@@ -208,6 +208,35 @@ function buildGraph(memories: ExtractedMemory[]): { nodes: GraphNode[]; links: G
     }
   }
 
+  // Implementation links (v2.6+): if two memories share a common implementation
+  // commit (from `ai-memory link`), draw an "implementation" edge between them.
+  // We surface commit SHAs as shared-reference keys — memories that both point to
+  // the same commit are co-implementing peers, which is a meaningful relationship
+  // to visualise without adding artificial commit nodes to the memory graph.
+  const shaToMemoryIds = new Map<string, string[]>();
+  for (const m of memories) {
+    if (!m.links?.implementations?.length) continue;
+    const id = memoryId(m);
+    for (const impl of m.links.implementations) {
+      const list = shaToMemoryIds.get(impl.short) ?? [];
+      list.push(id);
+      shaToMemoryIds.set(impl.short, list);
+    }
+  }
+  for (const [, ids] of shaToMemoryIds) {
+    if (ids.length < 2) continue;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = `${ids[i]}|${ids[j]}`;
+        const rev = `${ids[j]}|${ids[i]}`;
+        if (!linkedPairs.has(key) && !linkedPairs.has(rev)) {
+          links.push({ source: ids[i], target: ids[j], reason: "implementation" });
+          linkedPairs.add(key);
+        }
+      }
+    }
+  }
+
   return { nodes, links };
 }
 

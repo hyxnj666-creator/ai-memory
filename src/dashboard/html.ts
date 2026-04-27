@@ -366,23 +366,54 @@ function closeDetail() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
 
 // === Graph ===
+let graphActiveTypes = null; // null = all visible
+
 async function renderGraph(app) {
   if (!graphData) graphData = await api('graph');
+  if (!graphActiveTypes) graphActiveTypes = new Set(Object.keys(TYPE_COLORS));
+
+  const nodeCount = graphData.nodes.length;
+  const edgeCount = graphData.links.length;
+  const sameConvEdges = graphData.links.filter(l => l.reason === 'same conversation').length;
+  const keywordEdges = graphData.links.filter(l => l.reason === 'shared keyword').length;
 
   app.innerHTML = \`<div class="fade-in">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <h2 class="text-sm font-semibold text-gray-300">Knowledge Graph</h2>
-      <div class="flex gap-3">
-        \${Object.entries(TYPE_COLORS).map(([t,c]) =>
-          '<div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full '+c.dot+'"></div><span class="text-xs text-gray-400">'+t+'</span></div>'
-        ).join('')}
-      </div>
+      <span class="text-xs text-gray-500">\${nodeCount} nodes · \${edgeCount} edges (\${sameConvEdges} conversation, \${keywordEdges} keyword)</span>
     </div>
-    <div id="graph-container" class="rounded-xl border border-gray-700 bg-gray-900 relative" style="height:600px"></div>
+    <div class="flex flex-wrap gap-2 mb-3" id="graph-type-filters">
+      \${Object.entries(TYPE_COLORS).map(([t,c]) =>
+        '<button data-type="'+t+'" onclick="graphToggleType(\''+t+'\')" class="graph-type-btn flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-all '+c.border+' '+c.bg+' '+c.text+'" data-active="true"><div class="w-2 h-2 rounded-full '+c.dot+'"></div>'+t+'</button>'
+      ).join('')}
+      <span class="text-xs text-gray-600 self-center ml-2 border-l border-gray-700 pl-2">
+        <span class="inline-block w-4 border-t border-indigo-500 mr-1 align-middle"></span>conversation
+        <span class="inline-block w-4 border-t border-dashed border-gray-500 mr-1 ml-2 align-middle"></span>keyword
+      </span>
+    </div>
+    <div id="graph-container" class="rounded-xl border border-gray-700 bg-gray-900 relative" style="height:580px"></div>
     <div id="graph-tooltip" class="graph-tooltip hidden"></div>
   </div>\`;
 
   renderForceGraph(graphData);
+}
+
+function graphToggleType(type) {
+  if (graphActiveTypes.has(type)) {
+    if (graphActiveTypes.size > 1) graphActiveTypes.delete(type);
+  } else {
+    graphActiveTypes.add(type);
+  }
+  // Update button appearance
+  document.querySelectorAll('.graph-type-btn').forEach(btn => {
+    const t = btn.getAttribute('data-type');
+    const active = graphActiveTypes.has(t);
+    btn.setAttribute('data-active', active ? 'true' : 'false');
+    btn.style.opacity = active ? '1' : '0.35';
+  });
+  // Re-render with filter
+  const container = document.getElementById('graph-container');
+  if (container) { container.innerHTML = ''; renderForceGraph(graphData); }
 }
 
 function renderForceGraph(data) {
@@ -392,6 +423,17 @@ function renderForceGraph(data) {
     return;
   }
 
+  // Apply type filter
+  const visibleNodes = data.nodes.filter(n => !graphActiveTypes || graphActiveTypes.has(n.type));
+  const visibleIds = new Set(visibleNodes.map(n => n.id));
+  const visibleLinks = data.links.filter(l => {
+    const src = l.source.id ?? l.source;
+    const tgt = l.target.id ?? l.target;
+    return visibleIds.has(src) && visibleIds.has(tgt);
+  });
+
+  const filtered = { nodes: visibleNodes, links: visibleLinks };
+
   const width = container.clientWidth;
   const height = container.clientHeight;
   const tooltip = document.getElementById('graph-tooltip');
@@ -399,32 +441,46 @@ function renderForceGraph(data) {
   const svg = d3.select(container).append('svg')
     .attr('viewBox', [0, 0, width, height]);
 
+  // Arrow markers for implementation links (future use)
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow').attr('viewBox', '0 -4 8 8').attr('refX', 14).attr('refY', 0)
+    .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', '#6366f1').attr('opacity', 0.6);
+
   const g = svg.append('g');
 
   svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', (e) => {
     g.attr('transform', e.transform);
   }));
 
-  const simulation = d3.forceSimulation(data.nodes)
-    .force('link', d3.forceLink(data.links).id(d => d.id).distance(80))
-    .force('charge', d3.forceManyBody().strength(-200))
+  const simulation = d3.forceSimulation(filtered.nodes)
+    .force('link', d3.forceLink(filtered.links).id(d => d.id).distance(90))
+    .force('charge', d3.forceManyBody().strength(-220))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(25));
+    .force('collision', d3.forceCollide().radius(28));
 
+  // Draw edges — different style by reason
   const link = g.append('g').selectAll('line')
-    .data(data.links).join('line')
-    .attr('stroke', '#374151').attr('stroke-width', 1).attr('stroke-opacity', 0.5);
+    .data(filtered.links).join('line')
+    .attr('stroke', l => l.reason === 'same conversation' ? '#6366f1' : l.reason === 'implementation' ? '#10b981' : '#374151')
+    .attr('stroke-width', l => l.reason === 'same conversation' ? 1.5 : 1)
+    .attr('stroke-opacity', l => l.reason === 'same conversation' ? 0.6 : 0.35)
+    .attr('stroke-dasharray', l => l.reason === 'shared keyword' ? '4 3' : null)
+    .attr('marker-end', l => l.reason === 'implementation' ? 'url(#arrow)' : null);
 
   const node = g.append('g').selectAll('circle')
-    .data(data.nodes).join('circle')
+    .data(filtered.nodes).join('circle')
     .attr('r', d => {
-      const linkCount = data.links.filter(l => l.source.id === d.id || l.target.id === d.id || l.source === d.id || l.target === d.id).length;
-      return Math.min(6 + linkCount * 2, 18);
+      const lc = filtered.links.filter(l => {
+        const s = l.source.id ?? l.source; const t = l.target.id ?? l.target;
+        return s === d.id || t === d.id;
+      }).length;
+      return Math.min(6 + lc * 2, 18);
     })
     .attr('fill', d => (TYPE_COLORS[d.type] || TYPE_COLORS.decision).hex)
     .attr('stroke', '#111827').attr('stroke-width', 1.5)
     .attr('cursor', 'pointer')
-    .attr('opacity', d => d.status === 'resolved' ? 0.4 : 0.9)
+    .attr('opacity', d => d.status === 'resolved' ? 0.35 : 0.9)
     .call(d3.drag()
       .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
       .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
@@ -432,19 +488,35 @@ function renderForceGraph(data) {
     );
 
   const labels = g.append('g').selectAll('text')
-    .data(data.nodes).join('text')
-    .text(d => d.title.length > 20 ? d.title.slice(0, 18) + '…' : d.title)
+    .data(filtered.nodes).join('text')
+    .text(d => d.title.length > 22 ? d.title.slice(0, 20) + '…' : d.title)
     .attr('font-size', 9).attr('fill', '#9ca3af')
     .attr('text-anchor', 'middle').attr('dy', -14)
     .attr('pointer-events', 'none');
 
   node.on('mouseover', (e, d) => {
+    // Highlight connected edges
+    link.attr('stroke-opacity', l => {
+      const s = l.source.id ?? l.source; const t = l.target.id ?? l.target;
+      return (s === d.id || t === d.id) ? 1 : 0.1;
+    });
+    node.attr('opacity', n => {
+      if (n.id === d.id) return 1;
+      const connected = filtered.links.some(l => {
+        const s = l.source.id ?? l.source; const t = l.target.id ?? l.target;
+        return (s === d.id && t === n.id) || (t === d.id && s === n.id);
+      });
+      return connected ? 0.9 : 0.2;
+    });
     tooltip.classList.remove('hidden');
-    tooltip.innerHTML = '<div class="font-medium text-white">' + esc(d.title) + '</div><div class="text-gray-400 text-xs mt-1">' + d.type + ' · ' + d.date + (d.author ? ' · ' + d.author : '') + '</div>';
+    const lc = filtered.links.filter(l => { const s = l.source.id ?? l.source; const t = l.target.id ?? l.target; return s === d.id || t === d.id; }).length;
+    tooltip.innerHTML = '<div class="font-medium text-white">' + esc(d.title) + '</div><div class="text-gray-400 text-xs mt-1">' + d.type + ' · ' + d.date + (d.author ? ' · ' + esc(d.author) : '') + ' · ' + lc + ' connection' + (lc !== 1 ? 's' : '') + '</div>';
   }).on('mousemove', (e) => {
     tooltip.style.left = (e.pageX + 12) + 'px';
     tooltip.style.top = (e.pageY - 10) + 'px';
   }).on('mouseout', () => {
+    link.attr('stroke-opacity', l => l.reason === 'same conversation' ? 0.6 : 0.35);
+    node.attr('opacity', d => d.status === 'resolved' ? 0.35 : 0.9);
     tooltip.classList.add('hidden');
   }).on('click', (e, d) => {
     const m = memories.find(mem => mem.title === d.title && mem.type === d.type && mem.date === d.date);

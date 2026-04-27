@@ -2,6 +2,11 @@
 
 > One-stop gate for shipping a new `ai-memory-cli` version to npm. Copy-paste the
 > whole block into an issue or scratch file when cutting a release.
+>
+> **Cutting `2.5.0`?** Read [`docs/v2.5-maintainer-handoff.md`](docs/v2.5-maintainer-handoff.md)
+> first — there are four release-gated tasks (GIF render + benchmark run +
+> AGENTS.md eval + marketplace submissions) that need to land in a specific
+> order alongside this checklist.
 
 ## Preflight
 
@@ -30,7 +35,8 @@
 ```bash
 node dist/index.js --version            # prints ai-memory v<N>
 node dist/index.js --help               # full help, no warnings
-node dist/index.js list                 # detects Cursor/Claude/Windsurf/Copilot as applicable
+node dist/index.js try --json           # bundled scenario found, AGENTS.md generated, tmp cleaned (v2.5+)
+node dist/index.js list                 # detects Cursor/Claude/Windsurf/Copilot/Codex CLI as applicable (v2.5-06+)
 node dist/index.js extract --dry-run --pick 1   # dry-run extraction works
 node dist/index.js dashboard --port 3157 &      # web UI serves on :3157
 curl -s http://localhost:3157/api/stats | head  # returns JSON, kill the process after

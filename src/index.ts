@@ -14,6 +14,8 @@ import { runDashboard } from "./commands/dashboard.js";
 import { runExport } from "./commands/export.js";
 import { runImport } from "./commands/import.js";
 import { runDoctor } from "./commands/doctor.js";
+import { runTry } from "./commands/try.js";
+import { runLink } from "./commands/link.js";
 import { startMcpServer } from "./mcp/server.js";
 import { printError } from "./output/terminal.js";
 
@@ -101,6 +103,12 @@ switch (opts.command) {
     break;
   case "doctor":
     run(runDoctor(opts));
+    break;
+  case "try":
+    run(runTry(opts));
+    break;
+  case "link":
+    run(runLink(opts));
     break;
   case "serve":
     startMcpServer(opts.debug ?? false).catch((err) => {

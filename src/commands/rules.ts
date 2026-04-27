@@ -10,19 +10,28 @@ import {
   writeAgentsMd,
   type WriteAgentsMdResult,
 } from "../rules/agents-md-writer.js";
+import {
+  SKILLS_DEFAULT_DIR,
+  writeSkills,
+  type WriteSkillsResult,
+} from "../rules/skills-writer.js";
 
 const CURSOR_RULES_DEFAULT = ".cursor/rules/ai-memory-conventions.mdc";
 
-type Target = "cursor-rules" | "agents-md" | "both";
+type Target = "cursor-rules" | "agents-md" | "skills" | "both";
 
 interface TargetResult {
-  target: "cursor-rules" | "agents-md";
+  target: "cursor-rules" | "agents-md" | "skills";
   outputPath: string;
-  /** "created" | "updated" | "appended" | "already-up-to-date" | "conflict" */
+  /** "created" | "updated" | "appended" | "already-up-to-date" | "conflict" | "skills-summary" */
   action: string;
   wrote: boolean;
   conventions: number;
   decisions: number;
+  /** Per-skill breakdown, only set for target="skills". */
+  skills?: WriteSkillsResult["skills"];
+  /** Skipped skills (empty source type), only set for target="skills". */
+  skippedSkills?: WriteSkillsResult["skipped"];
   reason?: string;
 }
 
@@ -146,8 +155,53 @@ async function runAgentsMdTarget(
   };
 }
 
+async function runSkillsTarget(
+  /** Pass allMemories — skills-writer does its own per-type + status filter. */
+  allMemories: ExtractedMemory[],
+  language: "zh" | "en",
+  outputDir: string
+): Promise<TargetResult> {
+  const r: WriteSkillsResult = await writeSkills(allMemories, {
+    language,
+    outputDir,
+  });
+
+  const wroteAny = r.skills.some((s) => s.wrote);
+  // Action collapses to one line for the per-target summary; the per-skill
+  // breakdown lives in `skills` for the JSON output and the human formatter.
+  const action: string =
+    r.skills.length === 0
+      ? "skills-empty"
+      : wroteAny
+        ? r.skills.every((s) => s.action === "created")
+          ? "created"
+          : "updated"
+        : "already-up-to-date";
+
+  return {
+    target: "skills",
+    outputPath: outputDir,
+    action,
+    wrote: wroteAny,
+    conventions: r.totals.convention,
+    decisions: r.totals.decision,
+    skills: r.skills,
+    skippedSkills: r.skipped,
+  };
+}
+
 function formatTargetLine(r: TargetResult): string {
-  const label = r.target === "cursor-rules" ? "Cursor Rules" : "AGENTS.md";
+  const label =
+    r.target === "cursor-rules"
+      ? "Cursor Rules"
+      : r.target === "agents-md"
+        ? "AGENTS.md"
+        : "Anthropic Skills";
+
+  if (r.target === "skills") {
+    return formatSkillsLines(r);
+  }
+
   switch (r.action) {
     case "created":
       return `[+] ${label} created -> ${r.outputPath}`;
@@ -164,6 +218,44 @@ function formatTargetLine(r: TargetResult): string {
   }
 }
 
+function formatSkillsLines(r: TargetResult): string {
+  // Skills get a multi-line summary because we may have written multiple
+  // skill directories and skipped others (empty source type).
+  const lines: string[] = [];
+
+  if (r.action === "skills-empty") {
+    lines.push(
+      `[!] Anthropic Skills: nothing to write -> ${r.outputPath}\n` +
+        `    No conventions / decisions / architecture memories found. ` +
+        `Run \`ai-memory extract\` first.`
+    );
+    return lines.join("\n");
+  }
+
+  const writtenSkills = r.skills?.filter((s) => s.wrote) ?? [];
+  const upToDate = r.skills?.filter((s) => !s.wrote) ?? [];
+
+  if (writtenSkills.length > 0) {
+    lines.push(`[+] Anthropic Skills written -> ${r.outputPath}`);
+    for (const s of writtenSkills) {
+      lines.push(`    ${s.action === "created" ? "+ " : "~ "}${s.name} (${s.memories} ${pluraliseMemory(s.memories)})`);
+    }
+  } else if (upToDate.length > 0) {
+    lines.push(`[=] Anthropic Skills already up to date -> ${r.outputPath}`);
+  }
+
+  if (r.skippedSkills && r.skippedSkills.length > 0) {
+    const names = r.skippedSkills.map((s) => s.name).join(", ");
+    lines.push(`    (skipped, no source memories: ${names})`);
+  }
+
+  return lines.join("\n");
+}
+
+function pluraliseMemory(n: number): string {
+  return n === 1 ? "memory" : "memories";
+}
+
 export async function runRules(opts: CliOptions): Promise<number> {
   if (!opts.json) printBanner();
 
@@ -173,18 +265,34 @@ export async function runRules(opts: CliOptions): Promise<number> {
   const author = opts.allAuthors ? undefined : await resolveAuthor(config, opts.author);
 
   const allMemories = await readAllMemories(outputDir, author);
-  const memories = allMemories.filter(
+
+  // The rules pipeline has two memory subsets:
+  //   - rulesMemories: convention + active-decision (used by cursor-rules
+  //     and agents-md, unchanged from v2.4 behaviour).
+  //   - allMemories:   passed wholesale to the skills writer, which
+  //     filters internally per its catalogue (also picks up architecture).
+  const rulesMemories = allMemories.filter(
     (m) =>
       (m.type === "convention" || m.type === "decision") &&
       m.status !== "resolved"
   );
 
-  if (memories.length === 0) {
+  const target: Target = opts.target ?? "cursor-rules";
+
+  // Early-exit guards depend on which targets actually run. `skills`
+  // accepts architecture-only stores; the other targets do not.
+  const targetUsesRulesMemories =
+    target === "cursor-rules" || target === "agents-md" || target === "both";
+  const targetUsesAllMemories = target === "skills";
+
+  if (targetUsesRulesMemories && rulesMemories.length === 0) {
     printError('No conventions or decisions found. Run "ai-memory extract" first.');
     return 1;
   }
-
-  const target: Target = opts.target ?? "cursor-rules";
+  if (targetUsesAllMemories && allMemories.length === 0) {
+    printError('No memories found. Run "ai-memory extract" first.');
+    return 1;
+  }
 
   // Custom --output only applies to single-target runs; --target both
   // uses defaults for both files (the user can re-run twice if they want
@@ -204,30 +312,66 @@ export async function runRules(opts: CliOptions): Promise<number> {
   if (target === "cursor-rules" || target === "both") {
     const path =
       (target === "cursor-rules" && customOutput) || CURSOR_RULES_DEFAULT;
-    results.push(await runCursorRulesTarget(memories, language, path));
+    results.push(await runCursorRulesTarget(rulesMemories, language, path));
   }
 
   if (target === "agents-md" || target === "both") {
     const path =
       (target === "agents-md" && customOutput) || AGENTS_MD_DEFAULT_PATH;
-    results.push(await runAgentsMdTarget(memories, language, path));
+    results.push(await runAgentsMdTarget(rulesMemories, language, path));
   }
 
-  const conventions = memories.filter((m) => m.type === "convention").length;
-  const decisions = memories.filter((m) => m.type === "decision").length;
+  if (target === "skills") {
+    // For skills, --output is interpreted as the parent directory under
+    // which `<skill-name>/SKILL.md` files are written. Default is
+    // `.claude/skills`.
+    const dir = customOutput || SKILLS_DEFAULT_DIR;
+    results.push(await runSkillsTarget(allMemories, language, dir));
+  }
+
+  const conventions = rulesMemories.filter((m) => m.type === "convention").length;
+  const decisions = rulesMemories.filter((m) => m.type === "decision").length;
+  // Architecture is only relevant when the skills target ran (cursor-rules
+  // and agents-md both ignore architecture by design — they target the
+  // "always-on rules layer", architecture facts are too long-form). When
+  // skills wasn't requested we keep the field at 0 rather than omitting it,
+  // so consumers of `--json` get a stable schema.
+  const architecture = results.some((r) => r.target === "skills")
+    ? allMemories.filter((m) => m.type === "architecture").length
+    : 0;
 
   if (opts.json) {
     console.log(
       JSON.stringify({
-        rules: memories.length,
+        rules: rulesMemories.length,
         conventions,
         decisions,
+        architecture,
         outputs: results.map((r) => ({
           target: r.target,
           path: r.outputPath,
           action: r.action,
           wrote: r.wrote,
           ...(r.reason ? { reason: r.reason } : {}),
+          ...(r.skills
+            ? {
+                skills: r.skills.map((s) => ({
+                  name: s.name,
+                  path: s.path,
+                  action: s.action,
+                  wrote: s.wrote,
+                  memories: s.memories,
+                })),
+              }
+            : {}),
+          ...(r.skippedSkills && r.skippedSkills.length > 0
+            ? {
+                skippedSkills: r.skippedSkills.map((s) => ({
+                  name: s.name,
+                  memoryType: s.memoryType,
+                })),
+              }
+            : {}),
         })),
       })
     );
@@ -249,6 +393,11 @@ export async function runRules(opts: CliOptions): Promise<number> {
   if (results.some((r) => r.target === "agents-md" && r.wrote)) {
     console.log(
       `\n   AGENTS.md is read by Codex / Cursor / Windsurf / Copilot / Amp at session start.`
+    );
+  }
+  if (results.some((r) => r.target === "skills" && r.wrote)) {
+    console.log(
+      `\n   Claude Code will auto-load these skills when their description matches your request.`
     );
   }
   if (results.some((r) => r.action === "conflict")) {

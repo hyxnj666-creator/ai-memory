@@ -6,22 +6,16 @@
 
 > Turn AI editor chat history into typed Markdown + `AGENTS.md` rules — local-first, git-trackable, zero `.remember()` calls.
 
-<!--
-  Hero GIF slot. Render with:  npm run demo:render
-  The rendered GIF lives at docs/assets/demo/demo.gif. Replace this
-  comment with:
-    ![ai-memory in 30 seconds](docs/assets/demo/demo.gif)
-  See docs/assets/demo/RECORDING.md for the full workflow + decision log.
--->
+![ai-memory in 30 seconds](docs/assets/demo/demo.gif)
 
 ```bash
 npx ai-memory-cli extract                     # read your editor's chat history → typed Markdown
-npx ai-memory-cli rules --target agents-md    # → AGENTS.md (Cursor / Claude / Windsurf / Copilot all read it)
+npx ai-memory-cli rules --target agents-md    # → AGENTS.md (Cursor / Claude / Windsurf / Copilot / Codex all read it)
 npx ai-memory-cli recall "OAuth"              # show the full git lineage of any decision
 npx ai-memory-cli context --copy              # resume any session with full context
 ```
 
-Every other "AI memory" tool starts with a `remember()` API and asks you to instrument your code. **`ai-memory` reads your editor's chat history directly** — Cursor, Claude Code, Windsurf, Copilot Chat — and turns it into typed, git-trackable Markdown that every AI editor reads back via `AGENTS.md`. No new API surface to learn, no runtime memory store to keep alive between sessions.
+Every other "AI memory" tool starts with a `remember()` API and asks you to instrument your code. **`ai-memory` reads your editor's chat history directly** — Cursor, Claude Code, Windsurf, Copilot Chat, Codex CLI — and turns it into typed, git-trackable Markdown that every AI editor reads back via `AGENTS.md`. No new API surface to learn, no runtime memory store to keep alive between sessions.
 
 **Local-first by default.** Conversations never leave your machine; the only network call is to whichever LLM provider you've configured for extraction. Or use Ollama / LM Studio for fully offline operation.
 
@@ -33,9 +27,9 @@ Every other "AI memory" tool starts with a `remember()` API and asks you to inst
 
 Four things you won't find together anywhere else. The first three are structural; the fourth is engineering investment nobody else is making.
 
-1. **Zero `.remember()` boilerplate.** We read what you've already written — the Cursor / Claude Code / Windsurf / Copilot Chat transcripts that already live on your disk. No SDK to import, no runtime memory store to keep alive. Compare with mem0 / Letta / Zep / cortexmem, which require `client.add(...)` calls from your application code.
+1. **Zero `.remember()` boilerplate.** We read what you've already written — the Cursor / Claude Code / Windsurf / Copilot Chat / Codex CLI transcripts that already live on your disk. No SDK to import, no runtime memory store to keep alive. Compare with mem0 / Letta / Zep / cortexmem, which require `client.add(...)` calls from your application code.
 
-2. **Native `AGENTS.md` output.** `ai-memory rules --target agents-md` writes the cross-tool standard rules file that Cursor, Claude Code, Windsurf, and Copilot all consume. The merge is idempotent: only the section between `<!-- ai-memory:managed-section start --> ... end -->` is touched; any hand-written content in your `AGENTS.md` is preserved byte-for-byte. `AGENTS.md` adoption crossed 60K repos and is now under Linux Foundation stewardship — most projects hand-write theirs from scratch; we generate it from your conversation history.
+2. **Native `AGENTS.md` output.** `ai-memory rules --target agents-md` writes the cross-tool standard rules file that Cursor, Claude Code, Windsurf, Copilot, and OpenAI Codex CLI all consume. The merge is idempotent: only the section between `<!-- ai-memory:managed-section start --> ... end -->` is touched; any hand-written content in your `AGENTS.md` is preserved byte-for-byte. `AGENTS.md` adoption crossed 60K repos and is now under Linux Foundation stewardship — most projects hand-write theirs from scratch; we generate it from your conversation history.
 
 3. **Plain Markdown in git — no database.** `.ai-memory/` is the source of truth: Markdown files you `git diff`, code-review, branch, and revert. Other tools that advertise "git-trackable" memory ship git-tracked snapshots of their *internal store*; we ship the human-readable file format and let git own everything. Cross-machine sync is `git pull`.
 
@@ -43,18 +37,22 @@ Four things you won't find together anywhere else. The first three are structura
 
 ## We measure ourselves
 
-[CCEB v1 — Cursor Conversation Extraction Benchmark](docs/benchmarks/cceb-baseline.md), `gpt-4o-mini`, 9 hand-curated fixtures, 2026-04-25:
+[CCEB — Cursor Conversation Extraction Benchmark](docs/benchmarks/cceb-baseline.md), `gpt-4o-mini`, 30 hand-curated fixtures (v1.1 expansion):
 
-| Metric | Score |
-|---|---|
-| Overall F1 | **56.0%** (precision 43.8%, recall 77.8%) |
-| Noise-fixture handling (chit-chat + deferred-decision) | **100%** — no hallucinated memories |
-| Wall-clock | 70.5 s |
-| Spend | ≈ $0.005 |
+| Metric | v1.1 (2026-04-27, **30 fixtures**) | v1.0 / v2.5-01 (2026-04-26, 9 fixtures) | v2.4 (2026-04-25, 9 fixtures) |
+|---|---|---|---|
+| Overall F1 | **64.1%** (P 56.8% / R 73.5%) | 76.2% (P 66.7% / R 88.9%) | 56.0% (P 43.8% / R 77.8%) |
+| `decision` / `issue` F1 | **78.3% / 100%** | 75.0% / 100% | 66.7% / 66.7% |
+| `architecture` F1 | 72.7% (recall the new bottleneck) | 100% | 50% |
+| Noise rejection (chit-chat / deferred / hypothetical) | 100% — no hallucinated memories on any of the 4 noise fixtures | 100% (2 fixtures) | 100% (2 fixtures) |
+| Wall-clock | 239.7 s | 47.9 s | 70.5 s |
+| Spend | ≈ \$0.02 | ≈ \$0.006 | ≈ \$0.005 |
 
-The shape — high recall, lower precision dragged down by *over-extraction* (one logical decision sometimes splits into 2–4 candidate memories) — is documented openly with sample misses, sample false positives, and the exact v2.5 prompt-tuning work it points at. We'd rather publish 56% honestly than shop a number that drifts the moment the upstream model updates.
+The v1.1 expansion (cceb-001 — cceb-030) deliberately added harder cases v1.0 didn't exercise: multi-memory-per-conversation (architecture + convention together), commitment-shape ambiguity (process vs. technical TODOs), CJK/mixed-language conversations, and decision-impact-vs-followup-TODO triage. F1 dropped 12 pp from the 9-fixture row above; that's not a model regression — running the v1.0 fixtures alone against the same prompt still scores 76%. The 64% is the more honest measurement of the same extractor on a less cherry-picked fixture distribution. The biggest remaining lever is `todo` precision (11 of the 19 false positives are TODOs); per the baseline-doc analysis the next move is a post-extract pairwise-content dedup pass, tracked for v2.6.
 
-Why a custom benchmark? LongMemEval, LoCoMo, et al. measure runtime *recall* (did the agent remember a fact); we measure *extraction* (did we get the right structured artefact out of the chat). Different layer, different question. See the [category-positioning ADR](docs/decisions/2026-04-25-category-positioning.md).
+Sample misses, sample false positives, the per-fixture detail, the v1.0 → v1.1 delta analysis, and the methodology are all in the [baseline doc](docs/benchmarks/cceb-baseline.md). We'd rather publish numbers we can defend on cross-examination than shop a leaderboard score that drifts the moment the upstream model updates.
+
+**LongMemEval-50** (cross-corpus sanity check, [`bench/longmemeval/`](bench/longmemeval/)): on a deterministic 50-question subset of LongMemEval-S-cleaned, our literal-token evidence-preservation rubric scores **0 / 50 full + 2 / 50 partial** with `gpt-4o-mini` (~12 min, ~\$0.40). This is a deliberately strict proxy ("did every key token of the upstream answer survive into our extracted memories?", **not** LongMemEval native QA correctness — see [the spike doc §4.3](docs/cceb-v1.1-and-longmemeval-spike-2026-04-27.md) for the rubric); 0/50 says ai-memory is *not* pointed at open-domain QA over a 500-turn haystack, and the per-question matched/total counts in the [baseline doc](docs/benchmarks/cceb-baseline.md#longmemeval-50--gpt-4o-mini--2026-04-27-v25-08-evidence-preservation-rubric) show where partial signal does land (single-session-preference: 3-6 of 17-43 tokens consistently). LongMemEval, LoCoMo, et al. measure runtime *recall* (did the agent remember a fact); we measure *extraction* (did we get the right structured artefact out of the chat). Different layer, different question — see also the [category-positioning ADR](docs/decisions/2026-04-25-category-positioning.md).
 
 ### Other things it handles
 
@@ -65,9 +63,68 @@ Why a custom benchmark? LongMemEval, LoCoMo, et al. measure runtime *recall* (di
 
 ---
 
+## FAQ
+
+### "Doesn't 1M-token context obsolete you?"
+
+Short answer: long context and `ai-memory` solve different parts of
+the same problem. 1M-token windows let the model *see* a long
+conversation in one query; `ai-memory` makes that conversation's
+*decisions* persistent, reviewable, and shareable across sessions,
+machines, and teammates. We answer the question seriously below
+because it's the most-cited objection on HN to any structured-memory
+tool.
+
+**Cost compounds when you re-ship history every query.** Frontier
+input pricing as of 2026-04 sits at ~\$1–\$3 per 1M tokens
+([Anthropic](https://www.anthropic.com/pricing) /
+[OpenAI](https://openai.com/api/pricing) /
+[Google AI](https://ai.google.dev/pricing)). A two-week Cursor
+session reliably runs 100–300K tokens once tool-call payloads and
+file diffs are included; pasting that into every turn costs
+**\$0.20–\$0.60 per query** before you've asked anything. An
+`AGENTS.md` generated from the same conversation is on the order of
+1–5K tokens, loaded **once per session**. Multiply by your team
+size and queries-per-day; the gap is two orders of magnitude.
+
+**Long-context retrieval still degrades on non-headline
+information.** "Lost in the middle"
+([Liu et al. 2023](https://arxiv.org/abs/2307.03172)) and
+needle-in-haystack at 1M scale
+([BABILong, Kuratov et al. 2024](https://arxiv.org/abs/2406.10149))
+both show measurable recall drop on multi-hop retrieval past
+~128–256K tokens, even on models that advertise 1M-token windows.
+Long context works well for the most-recent and most-prominent
+turns; it degrades on the everyday "wait, what did we decide about
+X three weeks ago?" question — exactly the queries memory tools are
+designed for. Extraction is lossless on the only signal that
+matters (the typed decision / convention / architecture).
+
+**Long context is per-machine; `AGENTS.md` is per-repo.** Your
+laptop's chat history doesn't help your teammate's first day. A
+`.ai-memory/` directory committed to git does — it's reviewable in
+PRs, branchable, revertable, and re-readable by every editor on
+every machine that clones the repo. See
+[What only ai-memory does](#what-only-ai-memory-does) — points 3
+and 4 are the long form.
+
+We'll re-spike this FAQ if (a) sub-\$0.50/M frontier pricing ships,
+(b) long-context benchmarks show <5% retrieval degradation past
+500K, or (c) editors start shipping native cross-session
+conversation compression. Trigger list and full reasoning are in
+[`docs/1m-context-faq-spike-2026-04-27.md`](docs/1m-context-faq-spike-2026-04-27.md).
+
+---
+
 ## Quick Start
 
 ```bash
+# 30-second demo — no API key required.
+# Bootstraps a 3-memory hand-curated store in a tmp dir and prints the
+# AGENTS.md it generates (the file Cursor / Codex / Windsurf / Copilot all
+# read at session start). Cleans up afterwards.
+npx ai-memory-cli try
+
 # Set up API key (any OpenAI-compatible provider)
 export AI_REVIEW_API_KEY=sk-...    # or OPENAI_API_KEY
 
@@ -97,9 +154,21 @@ git add .ai-memory/ && git commit -m "chore: add ai-memory knowledge base"
 
 ## Commands
 
+### `try` — No-API-key demo (30 seconds, zero credentials)
+
+Bootstraps a hand-curated 3-memory store in a tmp dir, runs the real `rules --target agents-md` pipeline against it, and prints the generated AGENTS.md inline. No LLM call, no API key, no changes to your working directory — just a concrete answer to "what does this thing actually produce?" before you commit to setup.
+
+```bash
+npx ai-memory-cli try                     # full demo, tmp dir cleaned up afterwards
+npx ai-memory-cli try --keep              # leave the tmp scenario on disk for inspection
+npx ai-memory-cli try --json              # structured output (counts, AGENTS.md content, paths)
+```
+
+The bundled scenario contains 1 decision (PKCE auth flow), 1 architecture record (event-sourced billing audit log), and 1 convention (Relay-style cursor pagination) across two authors. Only conventions and decisions land in AGENTS.md — the same filter the real `rules` command uses on your own memories.
+
 ### `doctor` — One-shot health check
 
-Run this first. It diagnoses the six most common setup problems and tells you exactly how to fix each one.
+Run this after `try` if you decide to set ai-memory up against your real chat history. It diagnoses the six most common setup problems and tells you exactly how to fix each one.
 
 ```bash
 npx ai-memory-cli doctor                 # human-readable report
@@ -107,7 +176,7 @@ npx ai-memory-cli doctor --no-llm-check  # skip live API call (offline / CI)
 npx ai-memory-cli doctor --json          # structured output for automation / bug reports
 ```
 
-Checks cover: Node.js version, detected editors (Cursor / Claude Code / Windsurf / Copilot + conversation counts), LLM provider + live connectivity probe, memory store + author resolution, embeddings freshness, and MCP config registration. Exit code is `0` if everything passes, `1` if any check fails.
+Checks cover: Node.js version, detected editors (Cursor / Claude Code / Windsurf / Copilot / Codex CLI + conversation counts), LLM provider + live connectivity probe, memory store + author resolution, embeddings freshness, and MCP config registration. Exit code is `0` if everything passes, `1` if any check fails. When no API key is configured, `doctor` now points at `try` as the no-key fast path.
 
 ### `list` — Show available conversations
 
@@ -130,9 +199,36 @@ npx ai-memory-cli extract --type decision,todo      # only specific types
 npx ai-memory-cli extract --dry-run                 # preview without writing
 npx ai-memory-cli extract --force                   # overwrite existing files
 npx ai-memory-cli extract --author "alice"          # override author name
+npx ai-memory-cli extract --redact                  # scrub secrets / PII before LLM call (v2.5+)
 npx ai-memory-cli extract --verbose                 # show LLM request details
 npx ai-memory-cli extract --json                    # JSON output (CI friendly)
 ```
+
+#### `--redact` — scrub secrets / PII / internal hostnames before sending to the LLM (v2.5+)
+
+`extract`, `summary`, and `context --summarize` ship conversation excerpts to your configured LLM provider. "Local-first" applies to the **storage layer** — `.ai-memory/` is plain Markdown that we never upload — but the **extraction call** is necessarily an outbound HTTPS request. If your chat history contains accidentally pasted API keys, internal hostnames in stack traces, or customer email addresses in logs, `--redact` scrubs them before the request leaves your machine.
+
+```bash
+$ ai-memory extract --redact
+   ...
+Redaction: 5 items scrubbed before LLM (118 chars) — 3 openai-key, 2 email
+```
+
+Default-on rules (10): OpenAI / Anthropic / AWS / GitHub / Slack / GCP / Stripe API keys, RFC5322 emails, and `*.internal` / `*.corp` / `*.local` / `*.lan` / `*.intra` hostnames. Two opt-in rules (`jwt`, `aws-secret-key`) are off by default because they have high false-positive rates against long base64 strings; enable them via `.ai-memory/.config.json`:
+
+```json
+{
+  "redact": {
+    "enabled": true,
+    "enableOptional": ["jwt"],
+    "rules": [{ "name": "internal-jira", "pattern": "JIRA-[0-9]{4,}" }]
+  }
+}
+```
+
+CLI overrides config: `--no-redact` always disables, `--redact` always enables. The audit trail (per-rule hit counts) is always on when redaction is on, in both human and `--json` output. The matched value is **never** logged — that would defeat the purpose.
+
+> **Threat model.** Defense-in-depth, **not** a substitute for proper secrets management. The full policy doc — including out-of-scope items (image attachments, retroactive scrubbing of pre-existing memories, structured-PII vault inspection) and the threat-model boundaries — lives at [`docs/redaction-policy-2026-04-26.md`](docs/redaction-policy-2026-04-26.md).
 
 ### `search` — Search through extracted memories
 
@@ -186,14 +282,15 @@ Recall: "OAuth" — 1 memory, 4 commits of lineage
 - No new runtime dep — pure `node:child_process.execFile` against your
   existing `git` with bounded 10s timeouts.
 
-### `rules` — Export conventions as Cursor Rules **and** AGENTS.md
+### `rules` — Export conventions as Cursor Rules, AGENTS.md, **and** Anthropic Skills
 
 Generate editor rules that every AI tool reads natively:
 
 ```bash
 npx ai-memory-cli rules                            # default: .cursor/rules/ai-memory-conventions.mdc
 npx ai-memory-cli rules --target agents-md         # AGENTS.md (Codex / Cursor / Windsurf / Copilot / Amp)
-npx ai-memory-cli rules --target both              # write both files at default paths
+npx ai-memory-cli rules --target skills            # Anthropic Skills (Claude Code) — v2.5+
+npx ai-memory-cli rules --target both              # write Cursor Rules + AGENTS.md at default paths
 npx ai-memory-cli rules --output my-rules.mdc      # custom output (single-target only)
 npx ai-memory-cli rules --all-authors              # include team conventions
 ```
@@ -204,9 +301,19 @@ hand-written content in your `AGENTS.md` is preserved byte-for-byte. Re-running
 with no new memories is a no-op (`already-up-to-date`); malformed markers from
 a partial edit are reported as a conflict and the file is left untouched.
 
+`--target skills` writes [Anthropic Skills](https://docs.anthropic.com/en/docs/claude-code/skills) under `.claude/skills/`. Three skills get generated, one per long-lived memory type:
+
+| Skill | Source | What it tells Claude |
+|---|---|---|
+| `.claude/skills/ai-memory-coding-conventions/SKILL.md` | `convention` memories | When writing new code / naming things / designing APIs |
+| `.claude/skills/ai-memory-decision-log/SKILL.md` | `decision` memories (status ≠ resolved) | When proposing architectural changes / asked why a choice was made |
+| `.claude/skills/ai-memory-system-architecture/SKILL.md` | `architecture` memories | When implementing cross-component features / debugging integration |
+
+Skills are loaded **dynamically** by Claude Code based on the YAML frontmatter `description` matching your request — unlike AGENTS.md (always-on context), the body only enters context when relevant. The schema we target (frozen 2026-04-26) lives at [`docs/skills-schema-snapshot-2026-04-26.md`](docs/skills-schema-snapshot-2026-04-26.md). The `ai-memory-` prefix on skill names is an ownership signal: anything inside `.claude/skills/ai-memory-*/` is **fully regenerated** every run; user-authored skills under any other directory name are left alone.
+
 This is the **conversation-to-rules pipeline** — extract conventions from chat
 history, auto-generate the rules files every AI editor reads. No other tool
-does this.
+emits all three of Cursor Rules + AGENTS.md + Anthropic Skills from a single chat-history input.
 
 ### `resolve` — Mark memories as resolved
 
@@ -267,14 +374,27 @@ npx ai-memory-cli context --convo "resume tool" --copy
 npx ai-memory-cli context --convo "resume" --all-matching --copy   # include every "resume*" chat
 ```
 
+### `link` — Link memories to the commits that implement them (v2.6)
+
+```bash
+npx ai-memory-cli link                             # scan last 30 days of commits
+npx ai-memory-cli link --since "7 days ago"        # custom time window
+npx ai-memory-cli link --dry-run                   # preview links without writing
+npx ai-memory-cli link --clear-auto                # remove all auto-generated links
+```
+
+Scans your git log and scores each (memory, commit) pair using weighted token overlap: memory title × 3, type × 2, content × 1 vs commit subject × 3, changed paths × 2, body × 1. High-confidence matches (`score ≥ 0.70`) are written into the memory file as an invisible HTML comment block that the dashboard can surface. The default threshold is conservative — a bad auto-link is worse than no link. Use `--dry-run` first on a real repo to calibrate.
+
 ### `init` — Initialize configuration
 
 ```bash
 npx ai-memory-cli init                             # detect editors, create config
 npx ai-memory-cli init --with-mcp                  # also register ai-memory as MCP server
+npx ai-memory-cli init --schedule                  # register a daily extract --incremental cron job
+npx ai-memory-cli init --unschedule                # remove the scheduled task
 ```
 
-With `--with-mcp`, ai-memory writes / merges `.cursor/mcp.json` and `.windsurf/mcp.json` so your editor picks up the MCP server automatically — no more copy-pasting JSON from this README. Behaviour is **idempotent and safe**: already-registered entries are left alone, and any customisation you've made to `mcpServers["ai-memory"]` is preserved. For Claude Desktop, copy the snippet below to your OS-specific global config path (project-local doesn't apply).
+With `--with-mcp`, ai-memory writes / merges `.cursor/mcp.json` and `.windsurf/mcp.json` so your editor picks up the MCP server automatically. With `--schedule`, a daily extraction job is registered with the OS-native scheduler (launchd on macOS, crontab on Linux, Task Scheduler on Windows) — so your knowledge base stays fresh without any manual runs. Both flags are idempotent and safe.
 
 ### `export` / `import` — Move memories between machines (NEW)
 
@@ -475,6 +595,7 @@ Cloud API keys always take priority over local LLM. If you have `OPENAI_API_KEY`
 | **Claude Code** | `~/.claude/projects/{path}/*.jsonl` | Stable |
 | **Windsurf** | `~/AppData/Windsurf/User/workspaceStorage/*/state.vscdb` | Beta |
 | **VS Code Copilot** | `~/AppData/Code/User/workspaceStorage/*/chatSessions/*.json` | Beta |
+| **Codex CLI** | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Beta — v2.5+ |
 
 ---
 

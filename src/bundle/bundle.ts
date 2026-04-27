@@ -26,11 +26,18 @@ const VALID_TYPES: MemoryType[] = [
   "issue",
 ];
 
+// IMPORTANT: keep this list in lock-step with `SourceType` in src/types.ts.
+// When a new source ships, this whitelist MUST be widened in the same PR
+// or `bundle import` will reject any bundle exported with that source as
+// `sourceType must be one of: …` — silently breaking cross-machine
+// portability for users of the new source. v2.5-06 audit pass added "codex"
+// after this exact failure mode was caught (Finding A).
 const VALID_SOURCE_TYPES: SourceType[] = [
   "cursor",
   "claude-code",
   "windsurf",
   "copilot",
+  "codex",
 ];
 
 // --- Serialization ---

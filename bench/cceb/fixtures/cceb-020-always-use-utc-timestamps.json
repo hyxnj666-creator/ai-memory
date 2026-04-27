@@ -1,0 +1,36 @@
+{
+  "id": "cceb-020-always-use-utc-timestamps",
+  "description": "Same explicit-convention shape as cceb-019, different domain (timestamps). Two examples lets us catch 'model only learned the auth-domain version of this pattern.'",
+  "difficulty": "easy",
+  "tags": ["convention", "single-memory", "explicit-convention"],
+  "conversation": {
+    "title": "Timestamp handling discipline across the codebase",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We just spent three days debugging a billing-cycle bug that turned out to be a `LocalDateTime` field deserializing differently on a server in PT vs UTC. This is the third time something like this has bitten us this year. I think we need a hard rule, not 'let's all try to use UTC.'"
+      },
+      {
+        "role": "assistant",
+        "text": "Three timezone bugs in a year is the cost of a soft rule. The hard-rule pattern that works: every persisted timestamp is UTC, every API field is UTC ISO-8601 with the `Z` suffix, every internal type is `Instant` (or your language's equivalent — `datetime` with `tzinfo=timezone.utc`, `Date` in JS treated as UTC), and you only convert to local time at the rendering edge (the React component, the email template). Three concrete pieces: (1) DB columns are `timestamptz` everywhere, never `timestamp`; (2) API contracts forbid local-time fields by lint; (3) the user-facing display layer is the *only* place that knows about user timezone."
+      },
+      {
+        "role": "user",
+        "text": "Going to make it a convention: every persisted timestamp must be UTC, every API field must be UTC ISO-8601 with `Z`, and only the rendering layer is allowed to convert to user-local time. Code that violates this fails review. We'll add a lint rule for the API-contract piece this sprint as a forcing function."
+      },
+      {
+        "role": "assistant",
+        "text": "Solid. One pattern that catches the leftover edges: write a small `localTime(instant, user)` helper in the rendering package and ban direct `new Date(...).toLocaleString()` (or equivalent) outside of it. That makes 'only the rendering layer knows about user timezone' a grep-able fact rather than a reviewer's prior."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-utc-timestamps",
+      "type": "convention",
+      "must_contain": ["UTC"],
+      "must_not_contain": ["one-time migration"],
+      "note": "Forward-looking rule: every persisted timestamp + API field is UTC; only rendering layer converts. Same explicit-convention wording as cceb-019, different domain."
+    }
+  ]
+}

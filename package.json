@@ -1,6 +1,6 @@
 {
   "name": "ai-memory-cli",
-  "version": "2.4.0",
+  "version": "2.6.0",
   "description": "Turn editor chat history (Cursor, Claude Code, Windsurf, Copilot) into typed Markdown decisions + AGENTS.md rules — local-first, git-trackable, zero remember() calls.",
   "type": "module",
   "bin": {
@@ -22,17 +22,21 @@
     "test:watch": "vitest",
     "bench:cceb": "tsx bench/cceb/run.ts",
     "bench:cceb:dry": "tsx bench/cceb/run.ts --dry-run",
+    "bench:longmemeval": "tsx bench/longmemeval/run.ts",
+    "bench:longmemeval:dry": "tsx bench/longmemeval/run.ts --dry-run",
     "demo:render": "vhs docs/assets/demo/demo.tape",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "agents-md",
+    "cursor-rules",
     "ai",
     "memory",
     "cursor",
     "claude-code",
     "windsurf",
     "github-copilot",
+    "codex",
     "knowledge-extraction",
     "knowledge-pipeline",
     "chat-history",
@@ -48,7 +52,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hyxnj666-creator/ai-memory"
+    "url": "git+https://github.com/hyxnj666-creator/ai-memory.git"
   },
   "homepage": "https://github.com/hyxnj666-creator/ai-memory#readme",
   "bugs": {
@@ -61,7 +65,8 @@
     "dist",
     "README.md",
     "README.zh-CN.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/assets/demo/scenario"
   ],
   "devDependencies": {
     "@types/node": "^25.6.0",

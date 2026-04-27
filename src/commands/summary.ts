@@ -4,6 +4,12 @@ import type { CliOptions, ExtractedMemory } from "../types.js";
 import { readAllMemories } from "../store/memory-store.js";
 import { buildSummaryPrompt } from "../extractor/prompts.js";
 import { resolveAiConfig, callLLM } from "../extractor/llm.js";
+import {
+  buildRules,
+  formatAuditTrail,
+  redact,
+  shouldRedact,
+} from "../extractor/redact.js";
 import { loadConfig } from "../config.js";
 import { printBanner, printError, printWarning } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
@@ -107,7 +113,30 @@ export async function runSummary(opts: CliOptions): Promise<number> {
     printWarning(`${truncated} older memories truncated to fit context window (kept ${llmMemories.length} most recent).`);
   }
 
-  const prompt = buildSummaryPrompt(memoriesToJson(llmMemories), language, opts.focus);
+  // v2.5-05: redact secrets / PII from the memory payload before
+  // sending to the LLM. Memories on disk may have been extracted
+  // before --redact existed; the spike doc notes this case explicitly.
+  // v2.5-05 audit-fix: track whether redaction RAN (separate from
+  // whether it produced hits), so --json can emit a stable schema in
+  // both the "ran with hits" and "ran with no hits" cases.
+  let memoryPayload = memoriesToJson(llmMemories);
+  let redactionHits: { rule: string; count: number }[] = [];
+  let redactionTotalChars = 0;
+  let redactionApplied = false;
+  if (shouldRedact(opts.redact, opts.noRedact, config.redact)) {
+    redactionApplied = true;
+    const result = redact(memoryPayload, buildRules(config.redact));
+    memoryPayload = result.redacted;
+    redactionHits = result.hits;
+    redactionTotalChars = result.totalChars;
+    if (opts.verbose && result.hits.length > 0) {
+      process.stderr.write(
+        `[redact] ${formatAuditTrail(result.hits)} (${result.totalChars} chars)\n`
+      );
+    }
+  }
+
+  const prompt = buildSummaryPrompt(memoryPayload, language, opts.focus);
 
   if (!opts.json) {
     console.log(`\nGenerating summary from ${llmMemories.length} memories...`);
@@ -122,8 +151,35 @@ export async function runSummary(opts: CliOptions): Promise<number> {
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ summary, memoriesCount: filtered.length }));
+    console.log(
+      JSON.stringify({
+        summary,
+        memoriesCount: filtered.length,
+        // Always emit `redactions` + `redactedChars` when redaction RAN,
+        // even if zero hits — this lets CI consumers tell "redacted,
+        // found nothing" apart from "redaction not enabled". (v2.5-05
+        // audit-fix)
+        ...(redactionApplied
+          ? {
+              redactionApplied: true,
+              redactions: redactionHits,
+              redactedChars: redactionTotalChars,
+            }
+          : {}),
+      })
+    );
     return 0;
+  }
+  if (redactionApplied) {
+    if (redactionHits.length > 0) {
+      const total = redactionHits.reduce((acc, h) => acc + h.count, 0);
+      const breakdown = redactionHits.map((h) => `${h.count} ${h.rule}`).join(", ");
+      console.log(
+        `   Redaction: ${total} item${total === 1 ? "" : "s"} scrubbed before LLM (${redactionTotalChars} chars) — ${breakdown}`
+      );
+    } else {
+      console.log(`   Redaction: enabled, no matches found.`);
+    }
   }
 
   const outputFile = opts.output ?? join(outputDir, config.output.summaryFile);

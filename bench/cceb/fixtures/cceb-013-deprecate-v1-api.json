@@ -1,0 +1,36 @@
+{
+  "id": "cceb-013-deprecate-v1-api",
+  "description": "Conversation ratifies a decision made last week; extractor must produce ONE decision, not split 'we decided' + 'we're ratifying'",
+  "difficulty": "medium",
+  "tags": ["decision", "single-memory", "temporal", "ratification"],
+  "conversation": {
+    "title": "Locking in last week's v1 API deprecation call",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Last Tuesday's architecture review concluded we should sunset the v1 REST API in favour of the GraphQL gateway. I want to formalize that this morning so the deprecation timeline is clear before the all-hands on Thursday."
+      },
+      {
+        "role": "assistant",
+        "text": "Got it — so this isn't a fresh decision, it's putting last week's call in writing. The pieces you'll want recorded for the all-hands: who depends on v1 (a quick consumer audit), the deprecation window (typically two minor releases or 90 days, whichever is longer for a public API), the date `Sunset` headers start firing, and the date the v1 router actually 410s. Without those four numbers, 'we're deprecating v1' tends to be heard as 'we're considering deprecating v1.'"
+      },
+      {
+        "role": "user",
+        "text": "Right. Formalizing what we agreed last week: the v1 REST API is deprecated effective today. Sunset window is 120 days (one release longer than default because of the public-API piece). `Sunset: Sat, 24 Aug 2026` headers ship on every v1 response starting with the 2.6 release. The v1 router returns 410 Gone after Aug 24. All new internal consumers must use the GraphQL gateway from this point — exceptions need an ADR."
+      },
+      {
+        "role": "assistant",
+        "text": "Clean. One operational footnote: emit a counter on every v1 hit broken down by `User-Agent` so the consumer audit gets passive-instrumentation feedback for the next 120 days, not just the snapshot you took last week. If a heavy v1 consumer pops up after the announcement, you'll see it weeks before the 410 deadline rather than at deadline-minus-three-days."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-deprecate-v1",
+      "type": "decision",
+      "must_contain": ["v1"],
+      "must_not_contain": ["should we deprecate"],
+      "note": "ONE memory: deprecate v1 REST API in favour of GraphQL gateway with the 120-day window. The 'this is ratifying last week' phrasing must NOT cause the extractor to either skip it (it IS the on-record decision now) or split it into 'last week's call' + 'this week's ratification'."
+    }
+  ]
+}

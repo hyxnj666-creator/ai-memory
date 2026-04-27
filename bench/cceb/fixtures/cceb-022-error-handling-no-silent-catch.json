@@ -1,0 +1,36 @@
+{
+  "id": "cceb-022-error-handling-no-silent-catch",
+  "description": "Two options discussed (silent vs propagated); 'let's standardize on' wording converts to convention not decision. The boundary case v2.5-01 prompt-rewrite targets.",
+  "difficulty": "medium",
+  "tags": ["convention", "single-memory", "explicit-convention", "multi-option"],
+  "conversation": {
+    "title": "Standardizing error handling across services",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We've got two error-handling styles in the codebase. Half the services do `try { ... } catch (e) { logger.warn(e); }` and continue; the other half let exceptions propagate to the framework's top-level handler. The first style is producing silent corruption — a job 'succeeds' even though half its work didn't happen."
+      },
+      {
+        "role": "assistant",
+        "text": "The two patterns aren't equivalent — one trades observability for fragility-vs-corruption, and your incident reports are pointing at the corruption side of the trade. The principled rule is 'errors propagate by default; you only catch when you have a *meaningful* recovery path or you're at a boundary that has to translate the error (e.g., HTTP middleware turning an exception into a 500).' A bare `catch + log + continue` should be a code-review red flag because it almost always means 'I don't know what to do here, so I'll pretend it didn't happen.'"
+      },
+      {
+        "role": "user",
+        "text": "Right. Let's standardize on that across the codebase: errors propagate by default; you only `catch` when you have a meaningful recovery, an explicit boundary translation, or a documented retry path. A bare `catch + log + continue` fails review unless the reviewer is convinced the recovery is meaningful and not a 'pretend it didn't happen.' We'll add an ESLint rule for the obvious shape (`catch (e) { logger.warn(e); }` with no other statements) as a forcing function."
+      },
+      {
+        "role": "assistant",
+        "text": "Good shape. One implementation note: the ESLint rule false-negatives on the same pattern with a custom logger name or a slightly different shape (`logger.error`, `console.warn`, `log.info`), and false-positives on legitimate filter-based recoveries (`catch (e) { if (e instanceof IgnorableErr) return null; throw e; }`). Whitelist common logger names by config and require the catch body to have at least one `throw` or `return` or `if`-guard to mark it as intentional."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-no-silent-catch",
+      "type": "convention",
+      "must_contain": ["catch"],
+      "must_not_contain": ["one-time refactor"],
+      "note": "Forward-looking rule, despite the multi-option discussion preceding it. The 'let's standardize on' wording is the boundary-case marker that v2.5-01 prompt-rewrite added an example for. Trap: extractor classifies as decision because of the 'two options compared' framing."
+    }
+  ]
+}

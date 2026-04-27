@@ -1,0 +1,36 @@
+{
+  "id": "cceb-012-feature-flag-rollout",
+  "description": "Decision to ship behind a flag with explicit rollback condition; rollback condition belongs in impact, not as a separate TODO",
+  "difficulty": "medium",
+  "tags": ["decision", "single-memory", "partial-info", "rollback-condition"],
+  "conversation": {
+    "title": "Rollout plan for the new pricing page",
+    "turns": [
+      {
+        "role": "user",
+        "text": "The new pricing page is ready in staging. Marketing wants it live by Friday. Engineering wants a slower rollout because we changed the checkout flow underneath. Find the middle?"
+      },
+      {
+        "role": "assistant",
+        "text": "Three-stage rollout behind a feature flag is the standard middle path. Stage 1: 5% of logged-out traffic for 48 hours, watching conversion-to-checkout. Stage 2: 50% for another 48 hours, watching same metric. Stage 3: 100%. The feature flag stays in for at least one week post-100% before removal so rollback doesn't require a deploy. Marketing gets 'live by Friday' technically (5% IS live), engineering gets the rollback hatch."
+      },
+      {
+        "role": "user",
+        "text": "That works. Going with: ship the new pricing page behind a `pricing_v2` LaunchDarkly flag, three-stage rollout (5% → 50% → 100%), each stage 48 hours. Roll back to v1 if checkout-conversion drops more than 3 percentage points sustained for 6 hours at any stage. Flag removal is at least one week after 100%."
+      },
+      {
+        "role": "assistant",
+        "text": "Good. The only thing I'd add: instrument both *checkout-started* and *checkout-completed* events with the flag value, not just one. The conversion-rate denominator changes between staged and full rollout if you only emit one event — it'll look like a regression that isn't real."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-pricing-v2-rollout",
+      "type": "decision",
+      "must_contain": ["pricing"],
+      "must_not_contain": ["roll back if NPS drops"],
+      "note": "The decision is to ship pricing v2 behind the flag with the staged rollout. The 3-pp-sustained-6-hours rollback condition is part of the impact, NOT a separate TODO. Extractor must produce ONE memory, not split into decision + rollback-condition TODO."
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "_doc": "Per-type counts the deterministic-by-id sampler MUST produce. Locked by spike doc §4.2. Total = 50.",
+  "distribution": {
+    "single-session-user": 10,
+    "multi-session": 10,
+    "single-session-preference": 8,
+    "single-session-assistant": 8,
+    "temporal-reasoning": 7,
+    "knowledge-update": 7
+  },
+  "total": 50,
+  "skipped_types": [
+    "abstention (any *_abs question_id)"
+  ],
+  "selection_rule": "After loading longmemeval_s_cleaned.json, drop any sample whose question_id ends with '_abs'. Group remaining samples by question_type. Within each group, sort question_ids ascending (lexicographic). Take the first N ids per the distribution above. Concatenate the per-type lists in the order the distribution table is written here."
+}

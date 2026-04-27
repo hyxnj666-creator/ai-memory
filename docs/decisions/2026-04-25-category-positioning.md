@@ -23,7 +23,10 @@ and still unproven on Hacker News:
 Two near-identical "git-markdown memory" Show HN posts inside one week, **both
 sub-3 points**, signals the angle is no longer a fresh hook. Meanwhile the
 loudest category leader, `memory-graph/memory-graph` (191★), already covers
-all four editors we cover (Cursor / Claude Code / Windsurf / Copilot).
+the four IDE editors we covered at the time (Cursor / Claude Code / Windsurf
+/ Copilot). v2.5-06 added Codex CLI as a 5th source on 2026-04-26, putting
+us one ahead — but the gap is too narrow to be the wedge; chat-history-as-input
+remains the asymmetry that matters.
 
 We also re-evaluated whether to follow the LongMemEval benchmark trail blazed
 by `alphaonedev/ai-memory-mcp` (97.8% R@5), `shane-farkas/memento-memory`

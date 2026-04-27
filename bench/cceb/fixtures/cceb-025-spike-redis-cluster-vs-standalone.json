@@ -1,0 +1,35 @@
+{
+  "id": "cceb-025-spike-redis-cluster-vs-standalone",
+  "description": "Spike work bounded by a blocking event ('before we ship Q3 launch'). Tests the third commitment-gate path (no explicit deadline, but a blocking event).",
+  "difficulty": "medium",
+  "tags": ["todo", "single-memory", "commitment-blocking", "spike"],
+  "conversation": {
+    "title": "Bounding the Redis Cluster vs standalone investigation",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We discussed Redis Cluster vs standalone-with-failover last week and didn't land it. The next push that depends on this is the Q3 product launch, which involves a real-time feature that doubles our Redis load. We can't ship that on a guess."
+      },
+      {
+        "role": "assistant",
+        "text": "Right — this is unbounded if you let it be. Two ways the spike pays back: (1) actually run the Q3-launch traffic shape against both topologies on a staging Redis and compare p99 + failover behaviour, (2) talk to two teams running our scale on each topology and lift their post-mortem patterns rather than discovering them ourselves. Option (1) is more defensible but heavier; option (2) is faster but trusts other people's instrumentation."
+      },
+      {
+        "role": "user",
+        "text": "Going with (1) for the call, plus (2) as background. TODO: spike Redis Cluster vs standalone + Sentinel for the Q3-launch feature. Done = we have a written recommendation with measured p99/p999 latency at 2x current load, measured failover MTTR for both topologies, and a list of operational caveats from at least two external teams. This blocks the Q3 launch, so the spike has to land before the launch tracking ticket transitions to 'in-development.' No fixed calendar deadline; the launch ticket is the gate."
+      },
+      {
+        "role": "assistant",
+        "text": "Tightly scoped. One framing aid: include in the recommendation a 'when would we revisit this?' section. Redis topologies tend to be sticky — whatever you pick now will probably outlive the Q3 launch by years — so writing down 'we'd reconsider if X changes' (where X might be 'we cross 64 GB working set' or 'we need cross-region active-active') saves the next person from re-litigating from scratch."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "todo-redis-spike-q3",
+      "type": "todo",
+      "must_contain": ["Redis"],
+      "note": "Explicit committed TODO bounded by a *blocking event* (Q3-launch ticket transitioning to in-development), not a calendar deadline. v2.5-01 commitment gates: scope + done-criteria + blocking event. Distinct from cceb-005 which uses a calendar deadline."
+    }
+  ]
+}

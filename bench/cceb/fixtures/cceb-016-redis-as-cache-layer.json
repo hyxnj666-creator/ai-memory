@@ -1,0 +1,36 @@
+{
+  "id": "cceb-016-redis-as-cache-layer",
+  "description": "Architecture: introduce Redis as a cache-aside layer with TTL=5min; the TTL is part of the architecture, not a separate convention",
+  "difficulty": "medium",
+  "tags": ["architecture", "single-memory", "partial-info", "sub-claim-trap"],
+  "conversation": {
+    "title": "Adding a cache layer in front of the user-profile service",
+    "turns": [
+      {
+        "role": "user",
+        "text": "user-profile-service is the read-hot tier — every page load fans out to it. Postgres is fine but we're paying for read-replicas mostly to soak that traffic. I want to put a cache in front. What pattern, what TTL?"
+      },
+      {
+        "role": "assistant",
+        "text": "Cache-aside is the right pattern here: the application checks Redis first, falls back to Postgres on miss, populates Redis on the way back. Avoid read-through / write-through proxies — they add a failure mode where the cache becomes a SPOF. On TTL: profile data changes rarely but consistency-sensitively (a profile-name change should be visible within minutes, not hours). 5 minutes is the sweet spot — short enough that staleness is bounded by lunch-break, long enough that ~99% of reads hit the cache during steady state."
+      },
+      {
+        "role": "user",
+        "text": "Architecture decision: front user-profile-service with Redis as a cache-aside layer. TTL = 5 minutes. Cache key is `user-profile:v1:{user_id}`. On profile mutation the writer issues an explicit `DEL` so freshness is sub-second on the write path; the 5-minute TTL is just the upper bound for stale reads from missed invalidations."
+      },
+      {
+        "role": "assistant",
+        "text": "Good. Two patterns to layer on once it's running: (1) jittered TTL (5 minutes ± 30 seconds) so the cache doesn't stampede when many keys expire simultaneously after a deploy; (2) a `cache-version` prefix in the key (`user-profile:v1:`) so a schema change is a single `redis-cli FLUSHALL` of v1 keys without breaking writers — looks like you've already done that one."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-redis-cache-aside",
+      "type": "architecture",
+      "must_contain": ["cache"],
+      "must_not_contain": ["Redis is now the database"],
+      "note": "ONE architecture memory. The TTL=5min and the explicit-DEL-on-write are *part of the architecture's structure*, NOT separate conventions or decisions. Trap: extractor splits into 'use Redis cache' + 'TTL=5min' as two memories."
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "cceb-015-move-to-grpc",
+  "description": "Service-to-service protocol architecture choice: move internal RPCs from REST/JSON to gRPC + protobuf",
+  "difficulty": "medium",
+  "tags": ["architecture", "single-memory", "service-to-service"],
+  "conversation": {
+    "title": "Internal-RPC protocol direction",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Internal services talk to each other over REST/JSON today. We're seeing two pain points: (1) schema drift — we ship a breaking change in service A and service B finds out at runtime, (2) p99 latency on the hot path between order-service and inventory-service is dominated by JSON parse/serialize. Worth moving to gRPC?"
+      },
+      {
+        "role": "assistant",
+        "text": "Both pains map directly to what gRPC + protobuf solves. Schema drift becomes a compile-time error because the `.proto` files are the contract and code-generation enforces them; the JSON parse cost drops by ~5–10x on hot paths because protobuf wire format is binary and the parser is generated rather than reflective. The cost is operational: you need a protobuf registry (or a vendored `proto/` directory), a code-gen step in CI, and a way to handle the load-balancer layer (gRPC over HTTP/2 doesn't play nicely with L4 LBs that don't speak HTTP/2). For internal east-west traffic that cost is reasonable; you don't have to convert public-facing APIs."
+      },
+      {
+        "role": "user",
+        "text": "Architecture call: internal east-west traffic moves to gRPC + protobuf. Public/external APIs stay REST/JSON. The shared `proto/` directory lives in a new repo `apis-proto`, vendored into each service via a git submodule (we'll revisit if submodules cause too much pain). Code-gen runs in CI and the generated stubs are committed alongside the consumer service so reviewers can see them in PRs."
+      },
+      {
+        "role": "assistant",
+        "text": "Reasonable shape. Two operational points worth pinning: (1) the L7 load balancer (Envoy or Linkerd) needs an explicit role here — pick one in the same week as the protocol cutover, otherwise you'll do the migration twice. (2) Decide upfront whether health-checking goes via the standard gRPC `Health` service or HTTP/1.1 sidecar — Kubernetes default `httpGet` probes don't speak gRPC, and the wrong choice produces flapping pod-readiness three weeks later."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-grpc-east-west",
+      "type": "architecture",
+      "must_contain": ["gRPC"],
+      "must_not_contain": ["public APIs move to gRPC"],
+      "note": "Architecture: internal east-west traffic on gRPC + protobuf, public APIs stay REST. The submodule + code-gen choices are part of the architecture's structure, not separate memories."
+    }
+  ]
+}

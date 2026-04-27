@@ -1,0 +1,36 @@
+{
+  "id": "cceb-019-every-job-handler-idempotent",
+  "description": "The exact 'let's make it a convention: every X must Y' wording v1.0 missed on cceb-002. Pin until robust.",
+  "difficulty": "easy",
+  "tags": ["convention", "single-memory", "explicit-convention"],
+  "conversation": {
+    "title": "Job-handler discipline going forward",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We've had three production incidents this quarter where a retried background job applied the same effect twice — duplicate emails, double-charged invoices, that flavour. The shared pattern is 'handler isn't idempotent, retry framework retried it, customer got two of the thing.'"
+      },
+      {
+        "role": "assistant",
+        "text": "That's a class of bug, not a series of unrelated bugs — fixing each handler reactively will keep producing new incidents at the rate of new handlers. The structural fix is making idempotency a property the runtime can rely on, not a property each handler-author remembers to add. Two complementary mechanisms: (a) every handler reads its event's `event_id` and short-circuits if already processed (cheap, in-process); (b) the at-least-once retry layer attaches an idempotency key to outbound side-effect calls (e.g., Stripe `Idempotency-Key` header) so the external system rejects duplicates even if (a) fails."
+      },
+      {
+        "role": "user",
+        "text": "Let's make it a convention: every background-job handler must be idempotent. Same input applied twice produces the same end state. Non-idempotent handlers are not allowed to merge. Reviewers can ask 'how does this handler behave on retry?' and a satisfactory answer is required before approval."
+      },
+      {
+        "role": "assistant",
+        "text": "Good. To make the convention enforceable rather than aspirational, it's worth adding a lint rule or a CI check that fails if a `@JobHandler`-decorated function doesn't either (a) call `dedupeKey()`/`processedEvents.has()` or (b) carry an explicit `// idempotent-by-construction` comment with a reviewer-readable justification. Otherwise the convention becomes 'reviewers reject things sometimes' rather than 'CI rejects things always.'"
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-handler-idempotency",
+      "type": "convention",
+      "must_contain": ["idempoten"],
+      "must_not_contain": ["one-time decision"],
+      "note": "Forward-looking rule using the exact 'let's make it a convention: every X must Y' wording. THIS is the wording v1.0 missed on cceb-002. 'idempoten' stem matches idempotent/idempotency."
+    }
+  ]
+}

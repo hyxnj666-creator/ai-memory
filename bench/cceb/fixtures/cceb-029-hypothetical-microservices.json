@@ -1,0 +1,44 @@
+{
+  "id": "cceb-029-hypothetical-microservices",
+  "description": "Long discussion with NO commitment. 'What if we...', 'we could...' throughout. Expected: extract NOTHING.",
+  "difficulty": "medium",
+  "tags": ["noise", "hypothetical", "long"],
+  "conversation": {
+    "title": "Brainstorming a hypothetical microservices split",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Just a thought exercise — if we were to break the monolith into microservices, what would the natural seams be? Not committing to anything, just want to think through it on a Friday."
+      },
+      {
+        "role": "assistant",
+        "text": "Sure, let me hand-wave through possible cuts. The natural seams in a codebase like ours usually fall along bounded contexts: billing as one (it has its own data, its own SLA, and outside-world integrations), identity / auth as another, and the core product domain (orders + inventory + fulfilment) as a third. The fourth, often overlooked, is whatever you'd call the 'view layer of the monolith' — the templates and the request-routing layer that touches all the others; that one tends to stay monolith-shaped because it's the integration surface."
+      },
+      {
+        "role": "user",
+        "text": "What if we split billing first, since that's the cleanest seam? What would that look like in practice?"
+      },
+      {
+        "role": "assistant",
+        "text": "Hypothetically: extract billing into its own service with its own DB schema (probably its own Postgres instance for blast-radius reasons), define an API surface for the things the rest of the monolith calls (issue invoice, charge customer, get invoice status), and run them in parallel for a quarter while migrating one caller at a time. Could work; could also be 18 months of work that the team quietly resents."
+      },
+      {
+        "role": "user",
+        "text": "What's the version of this where we don't actually split, but pretend to?"
+      },
+      {
+        "role": "assistant",
+        "text": "The 'modular monolith' pattern: keep one deployable, but enforce module boundaries inside the codebase via package structure + lint rules that forbid cross-module direct imports. You get most of the bounded-context discipline benefit without the ops cost of running N services. It's also reversible — if a module really needs to leave the monolith later, the boundary is already there."
+      },
+      {
+        "role": "user",
+        "text": "Yeah that's interesting. Anyway, like I said, just thinking out loud — not making any calls today. Maybe we revisit in Q3 when we have more clarity on team-shape."
+      },
+      {
+        "role": "assistant",
+        "text": "Sounds good. The cheap thing you could do today — even without committing to either path — is start writing 'is this a billing thing or a core-product thing?' as a question on each new feature. Six months of that mental exercise gives you a much clearer picture of whether the seam is real or imagined when you do come back to it."
+      }
+    ]
+  },
+  "expected": []
+}

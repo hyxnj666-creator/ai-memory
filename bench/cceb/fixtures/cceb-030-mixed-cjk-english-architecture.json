@@ -1,0 +1,41 @@
+{
+  "id": "cceb-030-mixed-cjk-english-architecture",
+  "description": "Architecture choice discussed in mixed Chinese + English. Tests that the language layer doesn't bias type detection.",
+  "difficulty": "hard",
+  "tags": ["architecture", "convention", "multi-memory", "cjk", "multi-language"],
+  "conversation": {
+    "title": "Search 子系统的架构方向",
+    "turns": [
+      {
+        "role": "user",
+        "text": "我们的全文搜索现在是 Postgres `tsvector` 直接做的，量级小的时候没问题，但是随着 docs 量到 1M 量级以后 p95 latency 已经到 800ms 了，需要换。candidates: 把现有 tsvector tuned 一下硬撑、上 Elasticsearch、上 Meilisearch、上 Typesense。"
+      },
+      {
+        "role": "assistant",
+        "text": "Given 1M docs and 800ms p95，硬调 `tsvector` 顶多再压一半，但是接下来 6 个月的增长会再吃掉那部分预算。所以这是一个真正需要换的时刻。三个候选里：Elasticsearch 是最 mature 也最重的 ops；Meilisearch 是 DX 最好但是 cluster 故事还在演化；Typesense 在你们这个量级（1M-10M docs）的 ops/cost 比是最划算的。Typesense 的限制是它对 highly-customized scoring / re-ranking 不如 Elasticsearch 灵活，但是你们的搜索目前是 'find by text + filters'，没有自定义 scoring。"
+      },
+      {
+        "role": "user",
+        "text": "OK 架构决定：搜索子系统从 Postgres `tsvector` 迁移到 Typesense。Typesense 作为 read-side 的 search index，source-of-truth 还在 Postgres；写路径通过 outbox pattern 把 Postgres 的 docs 表变更同步到 Typesense。failure mode 是 Typesense 挂了 fallback 到 tsvector 走老路，所以 Postgres `tsvector` 索引保留至少 6 个月作为 safety net。同时我们要立一条 convention: every search-shaped feature must go through the Typesense client wrapper, no direct `tsvector` queries from new code — 这条以后写 review checklist 里。"
+      },
+      {
+        "role": "assistant",
+        "text": "Architecture + convention pair 都 clean。outbox pattern 这块一个 implementation 注意点：sync lag 要 instrument 出来，因为 'Typesense 落后 Postgres' 在某些 UI 上是 user-visible 的 staleness（比如 'I just edited this, why isn't it showing up in search'）。一个 metric: outbox-event-emit-time 到 Typesense-indexed-time 的 p99，配一个 SLO（典型是 5s p99 for non-critical search use cases）。"
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-typesense-search",
+      "type": "architecture",
+      "must_contain": ["Typesense"],
+      "note": "ONE architecture memory: migrate search from tsvector to Typesense as read-side index, Postgres as SoT, outbox pattern for sync. The 6-month tsvector safety-net is part of the architecture's structure, not a separate decision."
+    },
+    {
+      "id": "convention-typesense-client-wrapper",
+      "type": "convention",
+      "must_contain": ["Typesense"],
+      "note": "Forward-looking rule in mixed CJK+English: every search-shaped feature goes through the Typesense client wrapper; no direct tsvector queries from new code. Distinct from the architecture memory."
+    }
+  ]
+}

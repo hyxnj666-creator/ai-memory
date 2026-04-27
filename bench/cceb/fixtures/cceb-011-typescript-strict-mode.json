@@ -1,0 +1,36 @@
+{
+  "id": "cceb-011-typescript-strict-mode",
+  "description": "One-time repo-wide flip: turn on TypeScript strict mode. Decision (one-time choice), not Convention (forward-looking rule).",
+  "difficulty": "easy",
+  "tags": ["decision", "single-memory", "language", "boundary-case"],
+  "conversation": {
+    "title": "Turning on TypeScript strict mode in the monorepo",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Half the packages in the monorepo run with `strict: false` and the other half are strict. I keep getting bitten by type-narrowing bugs in the loose ones. Should we just bite the bullet and turn strict on everywhere?"
+      },
+      {
+        "role": "assistant",
+        "text": "Yes, but stage it. Flip `strict: true` at the root `tsconfig.base.json` so new code defaults to strict, then add `// @ts-nocheck` or a per-package override only on the packages that don't yet pass. That gives you a finite, visible backlog (the count of overrides) instead of a moving 'one day we'll be strict' target. Doing it as a single big-bang diff is technically simpler but reviewers can't usefully look at a 4000-line PR; staging keeps each package's diff reviewable."
+      },
+      {
+        "role": "user",
+        "text": "Going with that. Decision: `tsconfig.base.json` flips to `strict: true` this sprint. Each package that doesn't pass adds a per-package override `tsconfig.json` with `strict: false`, treated as a tracked migration backlog (one ticket per package, owner = whoever last touched it). No new packages may add a `strict: false` override after this sprint — that's the gate."
+      },
+      {
+        "role": "assistant",
+        "text": "Solid. Two implementation notes: (1) `noImplicitAny` and `strictNullChecks` produce 90% of the diff churn — if you want to stage *within* a package, those two are the natural sub-flags to flip first. (2) `tsc --noEmit` in CI on each package gives you the per-package override-status report for free."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-strict-mode",
+      "type": "decision",
+      "must_contain": ["strict"],
+      "must_not_contain": ["new code MUST always pass strict"],
+      "note": "Flip strict mode on at the root tsconfig — a one-time repo state change. NOT a forward-looking rule (which would be a convention); the gate clause about future packages is part of the impact, not a separate convention."
+    }
+  ]
+}

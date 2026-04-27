@@ -33,6 +33,8 @@ Commands:
   export      Export memories as a portable JSON bundle (cross-device transfer)
   import      Import memories from a JSON bundle into the local store
   doctor      Run a one-shot health check (runtime, editors, LLM, store, MCP)
+  try         Run a no-API-key demo: bundled 3-memory store -> AGENTS.md output
+  link        Scan git commits and auto-link them to memories they implement
 
 List options:
   --source <type>       Filter by source: cursor, claude-code, windsurf, copilot
@@ -46,6 +48,13 @@ Extract options:
   --type <types>        Comma-separated memory types to extract
   --dry-run             Preview extraction without writing files
   --force               Overwrite existing memory files if content changed
+  --redact              Scrub secrets / PII / internal hostnames before sending
+                        conversation text to the LLM (v2.5+). Default OFF.
+                        Recognises 9 default rules (openai/anthropic/AWS/GitHub/
+                        Slack/GCP/Stripe keys, emails, *.internal hostnames);
+                        2 opt-in rules (jwt, aws-secret-key) via config.
+                        See docs/redaction-policy-2026-04-26.md.
+  --no-redact           Force-disable redaction even if config.redact.enabled=true.
 
 Summary options:
   --output <file>       Output file path (default: SUMMARY.md)
@@ -54,6 +63,8 @@ Summary options:
   --convo <query>       Only summarize conversations matching a title substring
   --list-sources        List conversations with memory counts (no LLM call)
   --all-matching        With --convo: include all matching conversations (default: most recent only)
+  --redact              Same as 'extract --redact' — scrub before LLM call.
+  --no-redact           Force-disable redaction.
 
 Search options:
   search <query>        Search memories (hybrid: semantic + keyword)
@@ -71,10 +82,14 @@ Reindex options:
   --dry-run             With --dedup: preview what would be deleted without changes
 
 Rules options:
-  --target <name>       Output target: "cursor-rules" (default), "agents-md", or "both"
+  --target <name>       Output target: "cursor-rules" (default), "agents-md",
+                        "skills" (Anthropic Skills, v2.5+), or "both"
+                        ("both" = cursor-rules + agents-md, unchanged from v2.4).
   --output <path>       Output path. Defaults:
                           cursor-rules → .cursor/rules/ai-memory-conventions.mdc
                           agents-md    → AGENTS.md
+                          skills       → .claude/skills (parent dir; one
+                                          ai-memory-<type>/SKILL.md per type)
                         Ignored when --target both (uses both defaults).
 
 Resolve options:
@@ -84,6 +99,10 @@ Resolve options:
 Init options:
   --with-mcp            Also write .cursor/mcp.json + .windsurf/mcp.json so
                         ai-memory is registered as an MCP server automatically
+  --schedule            Register a daily extract --incremental task with the
+                        OS-native scheduler (launchd on macOS, crontab on Linux,
+                        Task Scheduler on Windows). Runs at 09:00 local time.
+  --unschedule          Remove the scheduled task created by --schedule
 
 Context options:
   --topic <topic>       Focus context on a specific topic
@@ -127,6 +146,19 @@ Doctor options:
   --no-llm-check        Skip the live LLM connectivity test (offline / CI)
   --json                Emit full structured report as JSON (machine-readable)
 
+Try options:
+  --keep                Keep the tmp scenario dir on exit (prints its path)
+  --json                Emit structured demo result + AGENTS.md as JSON
+
+Link options:
+  link                  Scan git log for commits that implement your memories
+  --since <time>        Scan commits after this time (default: "30 days ago")
+  --max-commits <n>     Maximum commits to scan (default: 200)
+  --auto-threshold <n>  Auto-link score threshold 0–1 (default: 0.70)
+  --dry-run             Preview what would be linked without writing files
+  --clear-auto          Remove all auto-linked entries (keep manual ones)
+  --verbose             Show suggestion-band results too
+
 Team options:
   --author <name>       Override auto-detected author name
   --all-authors         Include all authors' memories (summary/context)
@@ -148,7 +180,7 @@ export function parseArgs(argv: string[]): CliOptions {
   }
 
   const command = argv[0];
-  if (!["extract", "summary", "context", "init", "list", "search", "recall", "rules", "resolve", "serve", "reindex", "watch", "dashboard", "export", "import", "doctor"].includes(command)) {
+  if (!["extract", "summary", "context", "init", "list", "search", "recall", "rules", "resolve", "serve", "reindex", "watch", "dashboard", "export", "import", "doctor", "try", "link"].includes(command)) {
     return { command: "help" };
   }
 
@@ -161,6 +193,7 @@ export function parseArgs(argv: string[]): CliOptions {
     "--source", "--since", "--type", "--topic", "--recent",
     "--output", "--focus", "--pick", "--id", "--author",
     "--convo", "--source-id", "--port", "--file", "--target",
+    "--auto-threshold", "--max-commits",
   ]);
 
   if (command === "search" || command === "recall" || command === "resolve" || command === "import") {
@@ -293,11 +326,44 @@ export function parseArgs(argv: string[]): CliOptions {
       case "--with-mcp":
         opts.withMcp = true;
         break;
+      case "--schedule":
+        opts.schedule = true;
+        break;
+      case "--unschedule":
+        opts.unschedule = true;
+        break;
+      case "--clear-auto":
+        opts.clearAuto = true;
+        break;
+      case "--auto-threshold": {
+        const n = parseFloat(next ?? "");
+        if (!isNaN(n) && n >= 0 && n <= 1) { opts.autoThreshold = n; i++; }
+        break;
+      }
+      case "--max-commits": {
+        const n = parseInt(next ?? "", 10);
+        if (!isNaN(n) && n > 0) { opts.maxCommits = n; i++; }
+        break;
+      }
       case "--target":
-        if (next === "cursor-rules" || next === "agents-md" || next === "both") {
+        if (
+          next === "cursor-rules" ||
+          next === "agents-md" ||
+          next === "skills" ||
+          next === "both"
+        ) {
           opts.target = next;
           i++;
         }
+        break;
+      case "--keep":
+        opts.keep = true;
+        break;
+      case "--redact":
+        opts.redact = true;
+        break;
+      case "--no-redact":
+        opts.noRedact = true;
         break;
     }
   }

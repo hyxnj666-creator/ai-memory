@@ -1,0 +1,41 @@
+{
+  "id": "cceb-026-document-pkce-migration",
+  "description": "Multi-memory: a decision (refresh-token rotation policy) PLUS an owner-bound TODO (document the migration). Tests that v2.5-01's sub-claim FP fix doesn't fail in the other direction by suppressing legitimate accompanying TODOs.",
+  "difficulty": "medium",
+  "tags": ["todo", "decision", "multi-memory", "commitment-owner"],
+  "conversation": {
+    "title": "Wrapping up the PKCE migration",
+    "turns": [
+      {
+        "role": "user",
+        "text": "PKCE migration on the customer portal is done; v1 client_id is retired; nothing has fallen over in the four weeks of soak. There's one architectural piece we hand-waved through: refresh-token rotation. Are we good or do we need to pin it now?"
+      },
+      {
+        "role": "assistant",
+        "text": "Worth pinning. The PKCE flow gives you a refresh-token by default and the question is what you do with it across logins: (a) reuse-then-rotate (refresh-token is single-use; using it returns a new pair and invalidates the old) or (b) long-lived-with-explicit-rotation. Option (a) is the OAuth working group's current recommendation because if a refresh-token leaks, the legitimate client's next use of it triggers a token-reuse detection that revokes the whole family. We're already doing PKCE; (a) is a natural fit and is what `oauth4webapi` does when you set `useRefreshTokenRotation`."
+      },
+      {
+        "role": "user",
+        "text": "Decision: enable refresh-token rotation on the PKCE flow (single-use refresh tokens with reuse-detection-triggered family revocation). The `useRefreshTokenRotation` flag in `oauth4webapi` becomes mandatory in our auth wrapper. Separately: TODO for me to write up the full PKCE-migration runbook in the engineering wiki so other teams can adopt it without rediscovering the same gotchas. Owner: me, no fixed deadline but I'll do it before I context-switch to the next project."
+      },
+      {
+        "role": "assistant",
+        "text": "Two clean items. On the runbook: the highest-leverage thing to capture is the migration sequence (feature-flag → 5% → 50% → 100% → flag removal) and the failure modes you actually saw, even if they were caught in staging. New teams generally already understand 'use PKCE'; what they don't have is 'here are the three things I tripped over.'"
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-refresh-token-rotation",
+      "type": "decision",
+      "must_contain": ["refresh"],
+      "note": "Decision: enable refresh-token rotation on the PKCE flow. The `useRefreshTokenRotation` flag and family-revocation are part of impact, not separate memories."
+    },
+    {
+      "id": "todo-pkce-migration-runbook",
+      "type": "todo",
+      "must_contain": ["runbook"],
+      "note": "LEGITIMATE accompanying TODO with explicit owner ('me'). No calendar deadline but bounded by a blocking event ('before context-switch to next project'). The v2.5-01 sub-claim FP suppression must NOT cause this to be merged into the decision — the runbook task is independent work the speaker committed to."
+    }
+  ]
+}

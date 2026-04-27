@@ -1,6 +1,12 @@
 import { watch } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { CliOptions, ConversationMeta, Source } from "../types.js";
+import type {
+  AiMemoryConfig,
+  CliOptions,
+  ConversationMeta,
+  Source,
+  SourceType,
+} from "../types.js";
 import { getConversationState } from "../types.js";
 import { detectSources, sourceLabel } from "../sources/detector.js";
 import { extractMemories } from "../extractor/ai-extractor.js";
@@ -12,6 +18,68 @@ import { ANSI, c, printError } from "../output/terminal.js";
 
 const DEBOUNCE_MS = 5_000;
 const SCAN_INTERVAL_MS = 60_000;
+
+/**
+ * Sources whose on-disk layout supports `fs.watch`-based incremental
+ * updates (i.e. file additions / writes can be observed via filesystem
+ * events, not just by polling). All three are JSONL-file-per-conversation
+ * (or directory of such files) — Cursor / Claude Code / Codex CLI.
+ *
+ * SQLite-backed sources (Windsurf) and JSON-blob sources (Copilot) are
+ * deliberately excluded — fs.watch on a vacuumed/rewritten SQLite file
+ * fires unhelpfully, and Copilot writes whole-file replaces that the 30s
+ * polling fallback already catches. Adding a 6th source? Decide whether
+ * it's JSONL-file-per-conversation; if yes, add it here.
+ *
+ * v2.5-06 audit pass — Finding B regression: this used to be an inline
+ * `cursor || claude-code` check, which silently downgraded Codex to
+ * polling-only after the v2.5-06 ship. Now exported + tested.
+ */
+export function supportsFsWatch(sourceType: SourceType): boolean {
+  return (
+    sourceType === "cursor" ||
+    sourceType === "claude-code" ||
+    sourceType === "codex"
+  );
+}
+
+/**
+ * Whether a detected source is enabled by the user's config. Default is
+ * always-on per source — config keys are treated as "explicit opt-out"
+ * not "opt-in". Missing keys (e.g. an old config predating v2.5-06)
+ * therefore implicitly enable codex, which is the right default for
+ * user upgrades.
+ *
+ * v2.5-06 audit pass — Finding C regression: this used to be an inline
+ * if/else ladder with a `return true` fallthrough, which is
+ * indistinguishable from "I forgot to add this source". Promoting it to
+ * a named function with an exhaustive switch makes the omission a
+ * compile error next time.
+ */
+export function isSourceEnabledInConfig(
+  sourceType: SourceType,
+  config: AiMemoryConfig
+): boolean {
+  const sc = config.sources;
+  switch (sourceType) {
+    case "cursor":
+      return sc.cursor.enabled !== false;
+    case "claude-code":
+      return sc.claudeCode.enabled !== false;
+    case "windsurf":
+      return sc.windsurf?.enabled !== false;
+    case "copilot":
+      return sc.copilot?.enabled !== false;
+    case "codex":
+      return sc.codex?.enabled !== false;
+    default: {
+      // Exhaustiveness check — TS compile error if SourceType grows.
+      const _exhaustive: never = sourceType;
+      void _exhaustive;
+      return true;
+    }
+  }
+}
 
 export async function runWatch(opts: CliOptions): Promise<number> {
   const config = await loadConfig();
@@ -31,14 +99,9 @@ export async function runWatch(opts: CliOptions): Promise<number> {
   const projectName = config.sources?.cursor?.projectName;
   const { available } = await detectSources(projectName);
 
-  const filtered = available.filter((s) => {
-    const sc = config.sources;
-    if (s.type === "cursor") return sc.cursor.enabled !== false;
-    if (s.type === "claude-code") return sc.claudeCode.enabled !== false;
-    if (s.type === "windsurf") return sc.windsurf?.enabled !== false;
-    if (s.type === "copilot") return sc.copilot?.enabled !== false;
-    return true;
-  });
+  const filtered = available.filter((s) =>
+    isSourceEnabledInConfig(s.type, config)
+  );
 
   if (filtered.length === 0) {
     printError("No AI editor sources detected.");
@@ -86,7 +149,8 @@ export async function runWatch(opts: CliOptions): Promise<number> {
         { ...opts, types: effectiveTypes },
         fromTurn,
         config.model || undefined,
-        outputDir
+        outputDir,
+        config.redact
       );
 
       for (const m of result.memories) m.author = author;
@@ -157,10 +221,12 @@ export async function runWatch(opts: CliOptions): Promise<number> {
   // Periodic polling (works for all sources including SQLite-based ones)
   const interval = setInterval(scanSources, SCAN_INTERVAL_MS);
 
-  // Also try fs.watch for file-based sources (Cursor, Claude Code)
+  // Also try fs.watch for file-based sources. See `supportsFsWatch` above
+  // for the source-by-source rationale and the "adding a 6th source"
+  // checklist.
   const abortControllers: AbortController[] = [];
   for (const source of filtered) {
-    if (source.type === "cursor" || source.type === "claude-code") {
+    if (supportsFsWatch(source.type)) {
       const ac = new AbortController();
       abortControllers.push(ac);
       watchFileSource(source, ac.signal, scanSources, DEBOUNCE_MS).catch(() => {});

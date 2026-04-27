@@ -96,7 +96,18 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   const breakdown: Record<string, number> = {};
   let totalMemories = 0;
   let errorCount = 0;
-  let totalQuality: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0 };
+  let totalQuality: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0, filteredSubsumed: 0 };
+  // v2.5-05: aggregate redaction hits across all conversations so the
+  // run-end summary can show "redacted N items: 3 openai-key, 2 email"
+  // without spamming a per-rule line per conversation.
+  const totalRedactionHits = new Map<string, number>();
+  let totalRedactionChars = 0;
+  // v2.5-05 audit-fix: track whether redaction ran AT ALL (separate from
+  // whether it produced hits). Without this, a `--json` run with
+  // redaction on but zero matches is indistinguishable from a run with
+  // redaction off — bad signal for CI consumers and privacy-conscious
+  // users who want to verify "yes, we scrubbed and found nothing".
+  let redactionApplied = false;
   const total = allConversations.length;
 
   // 4. Process in parallel batches of CONCURRENCY
@@ -145,14 +156,31 @@ export async function runExtract(opts: CliOptions): Promise<number> {
         const extractOpts = { ...opts, types: effectiveTypes };
         let memories: ExtractedMemory[];
         try {
-          const result = await extractMemories(conversation, extractOpts, fromTurn, config.model || undefined, outputDir);
+          const result = await extractMemories(
+            conversation,
+            extractOpts,
+            fromTurn,
+            config.model || undefined,
+            outputDir,
+            config.redact
+          );
           memories = result.memories;
           totalQuality.total += result.qualityStats.total;
           totalQuality.kept += result.qualityStats.kept;
           totalQuality.filteredShort += result.qualityStats.filteredShort;
           totalQuality.filteredDuplicate += result.qualityStats.filteredDuplicate;
           totalQuality.filteredVague += result.qualityStats.filteredVague;
+          totalQuality.filteredSubsumed += result.qualityStats.filteredSubsumed;
           totalQuality.filteredExistingDup += result.qualityStats.filteredExistingDup;
+          // `redactionHits` is `[]` (truthy, length 0) when redaction
+          // ran but found nothing — distinct from `undefined` (off).
+          if (result.redactionHits !== undefined) {
+            redactionApplied = true;
+            for (const h of result.redactionHits) {
+              totalRedactionHits.set(h.rule, (totalRedactionHits.get(h.rule) ?? 0) + h.count);
+            }
+          }
+          if (result.redactionTotalChars) totalRedactionChars += result.redactionTotalChars;
         } catch (err) {
           if (!opts.json) console.log(`   [${idx}/${total}] "${meta.title.slice(0, 45)}" — error: ${err}`);
           errorCount++;
@@ -207,13 +235,31 @@ export async function runExtract(opts: CliOptions): Promise<number> {
     return errorCount > 0 ? 1 : 0;
   }
 
-  const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate + totalQuality.filteredVague + totalQuality.filteredExistingDup;
+  const qualityDropped = totalQuality.filteredShort + totalQuality.filteredDuplicate + totalQuality.filteredVague + totalQuality.filteredSubsumed + totalQuality.filteredExistingDup;
+
+  // Sort redaction hits by count desc for stable "headline-first" output.
+  const aggregatedRedactionHits = Array.from(totalRedactionHits.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([rule, count]) => ({ rule, count }));
+  const totalRedactionCount = aggregatedRedactionHits.reduce((acc, h) => acc + h.count, 0);
+
   if (opts.json) {
     console.log(JSON.stringify({
       total: totalMemories,
       breakdown,
       qualityFiltered: qualityDropped,
       qualityStats: totalQuality,
+      // Always emit BOTH fields when redaction ran, even if zero hits —
+      // this lets CI consumers tell "redacted, found nothing" apart from
+      // "redaction not enabled". The audit-trail shape is stable across
+      // these two cases (same keys, just zeroed).
+      ...(redactionApplied
+        ? {
+            redactionApplied: true,
+            redactions: aggregatedRedactionHits,
+            redactedChars: totalRedactionChars,
+          }
+        : {}),
     }));
   } else {
     printSummary(totalMemories, outputDir, breakdown);
@@ -225,10 +271,26 @@ export async function runExtract(opts: CliOptions): Promise<number> {
         totalQuality.filteredShort > 0 ? `${totalQuality.filteredShort} too short` : "",
         totalQuality.filteredDuplicate > 0 ? `${totalQuality.filteredDuplicate} title≈content` : "",
         totalQuality.filteredVague > 0 ? `${totalQuality.filteredVague} vague content` : "",
+        totalQuality.filteredSubsumed > 0 ? `${totalQuality.filteredSubsumed} todo subsumed by decision` : "",
         totalQuality.filteredExistingDup > 0 ? `${totalQuality.filteredExistingDup} duplicate of existing` : "",
       ].filter(Boolean).join(", ");
       console.log(`\nQuality filter: ${totalQuality.kept}/${totalQuality.total} kept (${retentionPct}%)`);
       console.log(`  - dropped ${qualityDropped}: ${parts}`);
+    }
+    if (redactionApplied) {
+      if (totalRedactionCount > 0) {
+        const ruleBreakdown = aggregatedRedactionHits
+          .map((h) => `${h.count} ${h.rule}`)
+          .join(", ");
+        console.log(
+          `\nRedaction: ${totalRedactionCount} item${totalRedactionCount === 1 ? "" : "s"} scrubbed before LLM (${totalRedactionChars} chars) — ${ruleBreakdown}`
+        );
+      } else {
+        // "Ran, found nothing" — surface this so the user can tell
+        // "redaction worked and matched no secrets" apart from
+        // "I forgot to pass --redact".
+        console.log(`\nRedaction: enabled, no matches found.`);
+      }
     }
   }
 

@@ -1,0 +1,41 @@
+{
+  "id": "cceb-017-event-bus-kafka",
+  "description": "Multi-memory: architecture (Kafka event bus) + convention (every consumer must be idempotent) from one conversation",
+  "difficulty": "hard",
+  "tags": ["architecture", "convention", "multi-memory", "explicit-convention"],
+  "conversation": {
+    "title": "Standing up the platform-wide event bus",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Cross-service async work is currently a pile of bespoke webhooks. We need a platform-level event bus. The candidates are Kafka (Confluent Cloud), AWS EventBridge, and NATS JetStream. We want at-least-once delivery, ordering per partition key, replay, and a path to ~50K events/sec within 18 months. Pick one and tell me how to wire it up."
+      },
+      {
+        "role": "assistant",
+        "text": "For your throughput target + ordering + replay requirement, Kafka is the safe pick. EventBridge is great for low-volume integration patterns but breaks down at 50K/s; NATS JetStream is excellent technically but the ops experience for a small team is heavier than managed Kafka. Architectural shape: one Kafka cluster (managed via Confluent Cloud to skip running ZooKeeper/KRaft yourselves), topics per *event family* not per service, partition key = the natural sharding key for that event family (e.g., `user_id` for user events). Producers go through a small in-process library that handles schema-registry registration; consumers run as separate worker processes per service, scaled independently of web."
+      },
+      {
+        "role": "user",
+        "text": "Going with that. Architecture: Confluent Cloud Kafka as the platform-wide async event bus, topics-per-event-family, partition key = natural sharding key. Producer/consumer wrapper library lives in `platform-events` and handles Avro schema registration. Consumers are separate worker processes per service. And let's make it a convention: every event consumer must be idempotent — the same event applied twice produces the same end state. We rely on idempotency for replay and for at-least-once retries; non-idempotent consumers are not allowed to merge."
+      },
+      {
+        "role": "assistant",
+        "text": "Two solid calls. The idempotency convention pairs nicely with two implementation rules you'll converge on naturally: (1) every event carries an `event_id` UUID, and consumers maintain a small `processed_events` table keyed on that id with a TTL, (2) for events that touch external APIs, the consumer library auto-attaches the same `event_id` as the API request idempotency key so duplicate replays don't create duplicate side-effects."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "architecture-kafka-event-bus",
+      "type": "architecture",
+      "must_contain": ["Kafka"],
+      "note": "Architecture: Confluent Cloud Kafka as the platform-wide event bus."
+    },
+    {
+      "id": "convention-idempotent-consumers",
+      "type": "convention",
+      "must_contain": ["idempoten"],
+      "note": "Forward-looking rule: every event consumer must be idempotent. 'idempoten' stem matches idempotent/idempotency."
+    }
+  ]
+}

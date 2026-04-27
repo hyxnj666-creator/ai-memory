@@ -64,6 +64,10 @@ Enter
 Sleep 5.5s
 
 # Frame 4 — turn the whole store into AGENTS.md (≈5s)
+# `ai-memory` resolves when installed globally (npm link / npm i -g).
+# In Docker (`docker run --rm -v "$PWD":/vhs ghcr.io/charmbracelet/vhs …`),
+# swap the line below to:
+#   Type "node /vhs/dist/index.js rules --target agents-md --all-authors"
 Type "ai-memory rules --target agents-md --all-authors"
 Enter
 Sleep 3s

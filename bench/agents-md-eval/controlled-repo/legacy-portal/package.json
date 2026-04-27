@@ -1,0 +1,7 @@
+{
+  "name": "legacy-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Older portal scheduled for migration. See AGENTS.md.",
+  "type": "module"
+}

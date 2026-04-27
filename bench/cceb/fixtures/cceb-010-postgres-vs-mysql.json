@@ -1,0 +1,36 @@
+{
+  "id": "cceb-010-postgres-vs-mysql",
+  "description": "Bread-and-butter database choice; pick Postgres over MySQL with clear rationale",
+  "difficulty": "easy",
+  "tags": ["decision", "single-memory", "database"],
+  "conversation": {
+    "title": "Picking the primary database for the new analytics service",
+    "turns": [
+      {
+        "role": "user",
+        "text": "We're spinning up a new analytics service and I need to commit to a primary OLTP database before we lay down migrations. The candidates are Postgres and MySQL. Most of our existing services run MySQL, but the analytics workload leans heavily on JSON aggregations and window functions."
+      },
+      {
+        "role": "assistant",
+        "text": "For an analytics-flavoured OLTP store, Postgres is the more comfortable fit: `JSONB` indexing is first-class, the window-function and CTE story is several years ahead of MySQL 8, and the planner is better at the kind of multi-join group-bys analytics work tends to produce. The trade-off is operational — your team has more MySQL muscle memory, and Postgres's `VACUUM` / autovacuum tuning has a learning curve. But for a greenfield service that mid-term will need read replicas + logical replication for derived stores, Postgres pays back the operational cost."
+      },
+      {
+        "role": "user",
+        "text": "Alright, calling it: the analytics service runs on Postgres 16 as the primary OLTP database. We accept the on-call learning curve for VACUUM / autovacuum tuning. New services may also default to Postgres going forward, but that's not a project-wide mandate yet — we'll revisit when the second new service comes up."
+      },
+      {
+        "role": "assistant",
+        "text": "Sounds good. Worth bookmarking: enable `pg_stat_statements` from day one (cheap, makes slow-query triage trivial) and pick a connection pooler before you hit ~100 concurrent backends — pgBouncer in transaction mode is the boring default."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "decision-postgres-analytics",
+      "type": "decision",
+      "must_contain": ["Postgres"],
+      "must_not_contain": ["MySQL is better"],
+      "note": "The analytics service runs on Postgres 16. Title or content must mention Postgres."
+    }
+  ]
+}

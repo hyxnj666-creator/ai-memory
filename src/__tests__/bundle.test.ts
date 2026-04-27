@@ -104,6 +104,32 @@ describe("bundle: serialize / parse", () => {
     expect(() => parseBundle(JSON.stringify(bundle))).toThrow(/sourceType must be one of/);
   });
 
+  // v2.5-06 audit pass — Finding A regression. The whitelist that decides
+  // which `sourceType` strings are accepted on import must be widened in
+  // the same wave that ships a new source adapter; otherwise users with
+  // memories extracted from the new source can't move the bundle to
+  // another machine without an explanatory error. This test pins each
+  // production source type so any future addition (a 6th source) that
+  // forgets to update VALID_SOURCE_TYPES fails this check loudly rather
+  // than silently breaking import.
+  it("parseBundle accepts every production sourceType (covers all 5 sources)", () => {
+    const allTypes = [
+      "cursor",
+      "claude-code",
+      "windsurf",
+      "copilot",
+      "codex",
+    ] as const;
+    for (const t of allTypes) {
+      const bundle = {
+        version: BUNDLE_VERSION,
+        memories: [{ ...memoryToBundleEntry(mem()), sourceType: t }],
+      };
+      const parsed = parseBundle(JSON.stringify(bundle));
+      expect(parsed.memories[0].sourceType).toBe(t);
+    }
+  });
+
   it("parseBundle rejects empty title", () => {
     const bundle = {
       version: BUNDLE_VERSION,

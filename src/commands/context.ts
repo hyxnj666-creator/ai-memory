@@ -10,6 +10,12 @@ import {
   type MemoryForContext,
 } from "../extractor/prompts.js";
 import { resolveAiConfig, callLLM } from "../extractor/llm.js";
+import {
+  buildRules,
+  formatAuditTrail,
+  redact,
+  shouldRedact,
+} from "../extractor/redact.js";
 import { loadConfig } from "../config.js";
 import { printBanner, printError, printWarning } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
@@ -239,11 +245,25 @@ export async function runContext(opts: CliOptions): Promise<number> {
       llmMemories = kept;
     }
 
-    const prompt = buildContextPrompt(
-      JSON.stringify(llmMemories.map(toContextMemory), null, 2),
-      language,
-      opts.topic
-    );
+    let memoryPayload = JSON.stringify(llmMemories.map(toContextMemory), null, 2);
+    if (shouldRedact(opts.redact, opts.noRedact, config.redact)) {
+      const result = redact(memoryPayload, buildRules(config.redact));
+      memoryPayload = result.redacted;
+      if (opts.verbose && result.hits.length > 0) {
+        process.stderr.write(
+          `[redact] ${formatAuditTrail(result.hits)} (${result.totalChars} chars)\n`
+        );
+      }
+      if (!opts.json && result.hits.length > 0) {
+        const total = result.hits.reduce((acc, h) => acc + h.count, 0);
+        const breakdown = result.hits.map((h) => `${h.count} ${h.rule}`).join(", ");
+        console.log(
+          `   Redaction: ${total} item${total === 1 ? "" : "s"} scrubbed before LLM (${result.totalChars} chars) — ${breakdown}`
+        );
+      }
+    }
+
+    const prompt = buildContextPrompt(memoryPayload, language, opts.topic);
 
     if (!opts.json) {
       console.log(`\nGenerating context summary from ${llmMemories.length} memories...`);

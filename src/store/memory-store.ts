@@ -1,6 +1,6 @@
 import { access, mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { ConversationMeta, ExtractedMemory, MemoryType } from "../types.js";
+import type { ConversationMeta, ExtractedMemory, MemoryLinks, MemoryType } from "../types.js";
 
 // --- Constants ---
 
@@ -374,6 +374,13 @@ function parseMemoryFile(
   const sourceMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${sourceRe.source})\\*\\*:\\s*(\\w[\\w-]*):(\\w+)`));
   const convMatch = content.match(new RegExp(`>\\s*\\*\\*(?:${convRe.source})\\*\\*:\\s*(.+)$`, "m"));
 
+  // Parse optional <!--links ... --> block written by `ai-memory link`
+  let links: MemoryLinks | undefined;
+  const linksMatch = content.match(/^<!--links\n([\s\S]*?)\n-->/m);
+  if (linksMatch) {
+    try { links = JSON.parse(linksMatch[1]) as MemoryLinks; } catch { /* ignore malformed */ }
+  }
+
   return {
     type,
     title: titleMatch?.[1] ?? filename.replace(".md", ""),
@@ -388,6 +395,7 @@ function parseMemoryFile(
     sourceTitle: convMatch?.[1]?.trim() ?? "",
     author: authorMatch?.[1]?.trim() || undefined,
     status: statusMatch?.[1] === "resolved" ? "resolved" : "active",
+    links,
   };
 }
 

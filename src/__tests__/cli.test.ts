@@ -212,6 +212,55 @@ describe("parseArgs", () => {
     expect(opts.target).toBeUndefined();
   });
 
+  it("parses rules with --target skills (v2.5-04)", () => {
+    const opts = parseArgs(["rules", "--target", "skills"]);
+    expect(opts.command).toBe("rules");
+    expect(opts.target).toBe("skills");
+  });
+
+  it("parses rules with --target skills + custom --output for the skills parent dir", () => {
+    const opts = parseArgs([
+      "rules",
+      "--target",
+      "skills",
+      "--output",
+      "custom/.claude/skills",
+    ]);
+    expect(opts.target).toBe("skills");
+    expect(opts.output).toBe("custom/.claude/skills");
+  });
+
+  // --- v2.5-05 redaction flags ---
+
+  it("parses extract with --redact (v2.5-05)", () => {
+    const opts = parseArgs(["extract", "--redact"]);
+    expect(opts.command).toBe("extract");
+    expect(opts.redact).toBe(true);
+    expect(opts.noRedact).toBeUndefined();
+  });
+
+  it("parses extract with --no-redact (v2.5-05)", () => {
+    const opts = parseArgs(["extract", "--no-redact"]);
+    expect(opts.command).toBe("extract");
+    expect(opts.noRedact).toBe(true);
+    expect(opts.redact).toBeUndefined();
+  });
+
+  it("parses summary with --redact (v2.5-05)", () => {
+    const opts = parseArgs(["summary", "--redact"]);
+    expect(opts.command).toBe("summary");
+    expect(opts.redact).toBe(true);
+  });
+
+  it("preserves both flags when both passed (precedence resolved by shouldRedact)", () => {
+    // The CLI parser doesn't resolve the precedence — it just records what
+    // the user passed. shouldRedact() is the single source of truth for
+    // "what does this combination actually mean".
+    const opts = parseArgs(["extract", "--redact", "--no-redact"]);
+    expect(opts.redact).toBe(true);
+    expect(opts.noRedact).toBe(true);
+  });
+
   // --- resolve command ---
 
   it("parses resolve command with pattern", () => {

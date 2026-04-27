@@ -1,0 +1,36 @@
+{
+  "id": "cceb-021-code-review-two-approvers",
+  "description": "Process convention (review policy), not technical. Tests that convention type doesn't degrade to decision when topic isn't code-shape.",
+  "difficulty": "medium",
+  "tags": ["convention", "single-memory", "explicit-convention", "process"],
+  "conversation": {
+    "title": "Updating the code-review policy",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Our review policy has been 'one approval' since the team was four people. We're now eleven and we've shipped two regressions in the last month that a second reviewer would have caught. Bumping to two approvers feels right but there's pushback that it'll slow merges."
+      },
+      {
+        "role": "assistant",
+        "text": "Two-approver policy is the standard pivot point at ~10 engineers and the slowdown concern is usually real but smaller than anticipated — typical effect is +0.5 day median PR time, in exchange for a measurable drop in production rollbacks. Three knobs that mitigate the slowdown without giving up the safety: (a) `CODEOWNERS` — at least one approver must own the touched code, the other can be anyone, so review load distributes; (b) carve-out for trivially-mergeable changes (docs-only, dependency bumps with green CI, generated files) — one approval; (c) the second-approver requirement is *enforced* by branch protection, not relied on as a habit, so reviewers can't 'just merge' under deadline pressure."
+      },
+      {
+        "role": "user",
+        "text": "Adopting that. New convention: every PR to `main` requires two approvals — one from a `CODEOWNERS` owner of the touched code, one from anyone. Carve-outs: docs-only, lockfile-only dependency bumps with green CI, and generated-file-only changes need one approval. Branch-protection-enforced; no 'I'll just merge it' override even with admin rights. Effective Monday."
+      },
+      {
+        "role": "assistant",
+        "text": "Good. Two operational pieces worth pinning: (1) configure GitHub branch protection to require *resolved* conversations, not just approvals — otherwise a reviewer can leave a blocking comment, get distracted, and the PR merges on the next thumbs-up from anyone; (2) the one-week-after-rollout retro is the right time to re-tune the carve-outs — you'll find one or two patterns the team is treating as 'should be carved out but isn't,' and adjusting then is cheaper than relitigating in three months."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-two-approvers",
+      "type": "convention",
+      "must_contain": ["approval"],
+      "must_not_contain": ["one-time policy update"],
+      "note": "Forward-looking process rule: every PR needs two approvals (with carve-outs). Tests that convention type holds for *process* rules, not just code/technical rules. The carve-outs are part of the convention's structure, not separate memories."
+    }
+  ]
+}

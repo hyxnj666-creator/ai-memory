@@ -1,0 +1,36 @@
+{
+  "id": "cceb-028-invoice-double-charge",
+  "description": "Discussion contains issue + decision-to-refund + TODO-to-add-test. Extractor must produce just the issue (the others are impact of it).",
+  "difficulty": "hard",
+  "tags": ["issue", "single-memory", "partial-info", "sub-claim-trap"],
+  "conversation": {
+    "title": "Diagnosing the double-charge bug",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Three customers charged twice for the same invoice this week. Manual refunds for now. Need to know what happened so it doesn't reach more people."
+      },
+      {
+        "role": "assistant",
+        "text": "Trace from the logs: the billing-job retry path attached the wrong `Idempotency-Key` to its second attempt. The original attempt used `invoice_<id>_attempt_1`; the retry used `invoice_<id>_attempt_2`. Stripe correctly treated those as two separate charge requests because the keys differed. Rootcause is the retry layer assumed 'attempt number is part of the key for distinguishing attempts of different things' rather than 'the key must be stable across retries of the *same* thing.' Fix is a one-liner: drop the `_attempt_N` suffix; the key is `invoice_<id>` end-to-end. The wider lesson — that no test caught this in CI — is the more concerning piece, because the retry code path was reviewed and had unit-test coverage that asserted 'retry sends a request' rather than 'retry sends an *idempotent* request.'"
+      },
+      {
+        "role": "user",
+        "text": "Issue: 'Three customers double-charged on retried billing jobs.' Severity: customer-facing financial impact, sev-1. Rootcause: retry layer included attempt number in the Stripe `Idempotency-Key`, breaking the idempotency contract on retries. Fix: drop `_attempt_N` suffix; deployed to prod at 14:22 UTC. Impact: 3 customers charged twice, manual refunds issued, no further duplicates after fix. Status: resolved. Worth noting that we're going to also (a) add a regression test that asserts the same Idempotency-Key is sent on first attempt and retry, and (b) audit the other places we use Stripe Idempotency-Key for the same shape of bug. Both follow the issue, not separate items."
+      },
+      {
+        "role": "assistant",
+        "text": "Right framing — keep them inside the issue's impact / follow-ups field rather than fragmenting. One thing the regression test should pin: the exact key format (`invoice_<id>`), not just 'a key was sent.' A test that says 'retry sent SOME idempotency key' would have passed before the fix too because the retry was sending one — just the wrong one. Asserting the key matches the original request's key is what catches this class of bug."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "issue-double-charge",
+      "type": "issue",
+      "must_contain": ["Idempotency-Key"],
+      "must_not_contain": ["TODO add regression test", "decision: refund customers"],
+      "note": "ONE issue memory. The user explicitly says 'these follow the issue, not separate items' — the regression test and audit are *impact / followups*, NOT a separate TODO and not a separate decision. Trap: extractor sees 'we'll also add a test' and emits a TODO."
+    }
+  ]
+}

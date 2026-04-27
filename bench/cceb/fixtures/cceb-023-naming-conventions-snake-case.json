@@ -1,0 +1,36 @@
+{
+  "id": "cceb-023-naming-conventions-snake-case",
+  "description": "Multiple naming choices in one conversation (file names, var names, table names). Should produce 1 convention covering 'naming', not 3 conventions.",
+  "difficulty": "hard",
+  "tags": ["convention", "multi-memory-trap", "explicit-convention", "multi-option"],
+  "conversation": {
+    "title": "Naming convention cleanup across the Python services",
+    "turns": [
+      {
+        "role": "user",
+        "text": "Naming in the Python services is a mess. Database tables are a mix of `userProfiles` and `user_profiles`. File names are mostly `snake_case.py` but a few are `camelCase.py`. Variables — well, PEP 8 says snake_case but ~20% of the code is camelCase from the early days. I want to fix all three at once."
+      },
+      {
+        "role": "assistant",
+        "text": "All three reduce to one underlying convention: `snake_case` for everything Python-shaped (files, vars, function names, keyword args) and for everything Postgres-shaped (table names, column names). The reason it's *one* convention rather than three: if you write 'table names are snake_case' and 'file names are snake_case' as separate rules, the next person to add a new artifact (queue topic? config key? environment variable name?) has to ask 'is there a rule for this?' If you write 'we use `snake_case` for all identifiers in the Python services', the new person has the answer before they ask."
+      },
+      {
+        "role": "user",
+        "text": "Convention: `snake_case` for all identifiers in the Python services. Files, variables, functions, kwargs, Postgres tables and columns, queue topics, config keys, env-var names — anything we name. The two carve-outs: (a) class names stay `PascalCase` because that's PEP 8 for classes, (b) external API contracts (REST/JSON field names) follow the consumer's expectation, which today means `camelCase` for the TypeScript frontend's contracts. Internal Python APIs always `snake_case`."
+      },
+      {
+        "role": "assistant",
+        "text": "Good single rule with the right two carve-outs. The migration plan tends to bite if you do it as one big-bang PR — 4000-line renames are unreviewable. Stage by package (one package per PR, full rename + mechanical fixes + CI green), in dependency order (least-depended-on first). The PEP 8 lint can be turned on per-package as each one finishes, so the staging is enforceable, not aspirational."
+      }
+    ]
+  },
+  "expected": [
+    {
+      "id": "convention-snake-case-naming",
+      "type": "convention",
+      "must_contain": ["snake_case"],
+      "must_not_contain": ["camelCase for table names"],
+      "note": "ONE convention covering all naming. The two carve-outs (PascalCase for classes, camelCase for external API contracts) are part of the convention's structure, not separate conventions. Trap: extractor splits into 3 conventions (files, vars, tables) because the user enumerated them."
+    }
+  ]
+}

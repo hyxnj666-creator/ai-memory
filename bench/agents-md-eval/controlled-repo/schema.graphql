@@ -1,0 +1,38 @@
+"""
+Public GraphQL API surface.
+
+NOTE for agents adding new fields: read AGENTS.md before adding paged queries.
+The pagination pattern below (`users`) is the legacy shape kept for one minor
+version while consumers migrate; do not mirror it for new endpoints.
+"""
+
+scalar DateTime
+
+type User {
+  id: ID!
+  handle: String!
+  createdAt: DateTime!
+}
+
+type Post {
+  id: ID!
+  authorId: ID!
+  body: String!
+  publishedAt: DateTime
+}
+
+type Comment {
+  id: ID!
+  postId: ID!
+  authorId: ID!
+  body: String!
+  createdAt: DateTime!
+}
+
+type Query {
+  user(id: ID!): User
+  post(id: ID!): Post
+
+  # Legacy paged endpoint — pre-conventions. Slated for migration.
+  users(offset: Int = 0, limit: Int = 20): [User!]!
+}

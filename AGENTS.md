@@ -9,8 +9,10 @@ ai-memory is a CLI tool + MCP server that extracts structured knowledge from AI 
 - **npm package name:** `ai-memory-cli` (DO NOT rename — see [docs/decisions/2026-04-24-naming.md](docs/decisions/2026-04-24-naming.md))
 - **Binary name:** `ai-memory`
 - **GitHub owner:** `hyxnj666-creator`
-- **Current version:** 2.4.0 (see CHANGELOG.md)
-- **Next version focus:** see [ROADMAP.md](ROADMAP.md) — v2.5 will target the over-extraction precision drag surfaced by the CCEB v1 baseline, plus CCEB v1.1 fixture growth + a LongMemEval 50-query subset adapter
+- **Current version:** 2.5.0 (in tree; 2.4.0 last published on npm — see [ROADMAP.md](ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md))
+- **v2.5 features in tree:** `ai-memory try` (no-key demo), `rules --target skills` (Anthropic Skills), `--redact` at LLM call sites, Codex CLI as 5th editor, CCEB v1.1 F1 64.1%, LongMemEval-50 adapter, README "1M-context FAQ", dedup quality improvements
+- **v2.6 features in tree (also not yet on npm):** `ai-memory link` (memory↔commit linking, weighted Jaccard scorer, `<!--links>` frontmatter), `init --schedule` (cross-platform daily cron: launchd/crontab/schtasks), single-chunk dedup fix + cross-type TODO subsumption (targets F1 75%+), dashboard graph enhancements (edge type differentiation, type filter toggles, hover highlight). Test suite **585**.
+- **Before publishing v2.5.0:** read [`docs/v2.5-maintainer-handoff.md`](docs/v2.5-maintainer-handoff.md) — two maintainer-only tasks remain (v2.5-03 marketplace submissions + v2.5-07 AGENTS.md downstream eval).
 - **Runtime deps:** `@modelcontextprotocol/sdk` (for `serve`) and `zod` (for bundle import validation). NO other runtime deps.
 
 ## Architecture
@@ -37,7 +39,9 @@ src/
 │   ├── dashboard.ts      # Launch local web UI
 │   ├── export.ts         # Portable JSON bundle (v2.3)
 │   ├── import.ts         # Import portable JSON bundle (v2.3)
-│   └── doctor.ts         # Health check (runtime/editors/LLM/store/embeddings/MCP, v2.4)
+│   ├── doctor.ts         # Health check (runtime/editors/LLM/store/embeddings/MCP, v2.4)
+│   ├── try.ts            # No-API-key demo: bundled scenario → AGENTS.md inline (v2.5-02)
+│   └── link.ts           # Scan git commits → auto-link to memories (weighted Jaccard, v2.6)
 ├── sources/              # Conversation parsers (one per editor)
 │   ├── cursor.ts         # ~/.cursor/projects/*/agent-transcripts/
 │   ├── claude-code.ts    # ~/.claude/projects/*/*.jsonl
@@ -61,7 +65,7 @@ src/
 ├── rules/                # Multi-target rules export (v2.4)
 │   └── agents-md-writer.ts  # Pure idempotent merge into AGENTS.md (managed-section markers)
 ├── git/                  # Thin wrappers around the user's `git` binary (v2.4)
-│   └── log-reader.ts     # parseGitLog (pure) + isGitRepo / getFileHistory / isPathTracked (execFile)
+│   └── log-reader.ts     # parseGitLog / parseBulkLog (pure) + isGitRepo / getFileHistory / getRecentCommits / isPathTracked (execFile)
 ├── dashboard/            # Local web UI (v2.1)
 │   ├── server.ts         # node:http API (/api/stats, /api/memories, /api/conversations, /api/quality, /api/graph)
 │   └── html.ts           # Embedded SPA (Tailwind + D3.js)
@@ -73,7 +77,8 @@ src/
 ├── output/
 │   └── terminal.ts       # ANSI colors (respects NO_COLOR), formatting
 └── utils/
-    └── author.ts         # Author resolution: CLI > config > git > OS
+    ├── author.ts         # Author resolution: CLI > config > git > OS
+    └── scheduler.ts      # Cross-platform scheduled-task registration (launchd/crontab/schtasks, v2.6)
 
 bench/
 └── cceb/                 # Cursor Conversation Extraction Benchmark (v2.4)

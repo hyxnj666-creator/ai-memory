@@ -59,10 +59,10 @@
 
 ```
 1. Source Detection
-   detector.ts → finds Cursor/Claude Code/Windsurf/Copilot conversations
+   detector.ts → finds Cursor/Claude Code/Windsurf/Copilot/Codex CLI conversations
 
 2. Conversation Loading
-   cursor.ts / claude-code.ts / windsurf.ts / copilot.ts → parses into Conversation objects
+   cursor.ts / claude-code.ts / windsurf.ts / copilot.ts / codex.ts → parses into Conversation objects
 
 3. Filtering
    extract.ts → applies --pick, --since, --incremental, ignore list, min turns
