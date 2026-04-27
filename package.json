@@ -1,6 +1,6 @@
 {
   "name": "ai-memory-cli",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Turn editor chat history (Cursor, Claude Code, Windsurf, Copilot) into typed Markdown decisions + AGENTS.md rules — local-first, git-trackable, zero remember() calls.",
   "type": "module",
   "bin": {
