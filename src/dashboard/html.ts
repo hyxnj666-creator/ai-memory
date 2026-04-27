@@ -384,7 +384,7 @@ async function renderGraph(app) {
     </div>
     <div class="flex flex-wrap gap-2 mb-3" id="graph-type-filters">
       \${Object.entries(TYPE_COLORS).map(([t,c]) =>
-        '<button data-type="'+t+'" onclick="graphToggleType(\''+t+'\')" class="graph-type-btn flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-all '+c.border+' '+c.bg+' '+c.text+'" data-active="true"><div class="w-2 h-2 rounded-full '+c.dot+'"></div>'+t+'</button>'
+        '<button data-type="'+t+'" onclick="graphToggleType(this.dataset.type)" class="graph-type-btn flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-all '+c.border+' '+c.bg+' '+c.text+'" data-active="true"><div class="w-2 h-2 rounded-full '+c.dot+'"></div>'+t+'</button>'
       ).join('')}
       <span class="text-xs text-gray-600 self-center ml-2 border-l border-gray-700 pl-2">
         <span class="inline-block w-4 border-t border-indigo-500 mr-1 align-middle"></span>conversation
