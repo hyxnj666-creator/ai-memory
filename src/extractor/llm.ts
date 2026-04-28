@@ -4,6 +4,18 @@
  * and JSON payload sanitisation.
  */
 
+// --- Built-in free-tier fallback (SiliconFlow / DeepSeek-V4-Flash) ---
+// Shared key for first-time users who haven't configured their own API key.
+// Base64-encoded to avoid plain-text leakage in logs / CI output.
+// Max 2 conversations per run enforced in extract.ts when this key is active.
+const _BK = 'c2stZGhxdGN2dXl4ZHR1bm5lZ3RmbGdranlob2hhY2tiamt3dmxtbmR1aHlyb2FuZHZs';
+export const BUILTIN_KEY = atob(_BK);
+export const BUILTIN_BASE_URL = 'https://api.siliconflow.cn/v1';
+export const BUILTIN_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
+export const BUILTIN_MAX_PICKS = 2;
+/** Max chunks processed per conversation when using the built-in key. */
+export const BUILTIN_MAX_CHUNKS = 20;
+
 // --- Concurrency semaphore (shared across all LLM callers) ---
 
 const MAX_CONCURRENT = 6;
@@ -28,15 +40,19 @@ export interface LLMConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  /** True when using the built-in shared key rather than a user-configured one. */
+  builtinFallback?: boolean;
 }
 
 /**
  * Resolve LLM config from environment variables.
- * Priority: AI_REVIEW > OPENAI > ANTHROPIC (with proxy) > OLLAMA > LM_STUDIO
+ * Priority: AI_REVIEW > OPENAI > ANTHROPIC (with proxy) > OLLAMA > LM_STUDIO > builtin
  * Local LLMs (Ollama, LM Studio) work without API keys.
+ * When no key is found, falls back to the built-in SiliconFlow/DeepSeek-V4-Flash key
+ * (limited to BUILTIN_MAX_PICKS conversations per run, enforced in extract.ts).
  * @param modelOverride Optionally override the model (e.g. from .config.json `model` field).
  */
-export function resolveAiConfig(modelOverride?: string): LLMConfig | null {
+export function resolveAiConfig(modelOverride?: string): LLMConfig {
   const candidates = [
     {
       key: process.env.AI_REVIEW_API_KEY,
@@ -94,7 +110,13 @@ export function resolveAiConfig(modelOverride?: string): LLMConfig | null {
     };
   }
 
-  return null;
+  // Built-in free-tier fallback — no user config required.
+  return {
+    apiKey: BUILTIN_KEY,
+    baseUrl: BUILTIN_BASE_URL,
+    model: BUILTIN_MODEL,
+    builtinFallback: true,
+  };
 }
 
 /** Remove characters that make JSON bodies invalid. */
@@ -105,7 +127,7 @@ function sanitize(text: string): string {
     .replace(/[\uD800-\uDFFF]/g, "");
 }
 
-const FETCH_TIMEOUT_MS = 120_000; // 2 minutes per LLM call
+const FETCH_TIMEOUT_MS = 60_000; // 60 s — fail fast so retries start sooner
 
 async function doFetch(url: string, body: string, apiKey: string): Promise<Response> {
   return fetch(url, {
@@ -119,16 +141,29 @@ async function doFetch(url: string, body: string, apiKey: string): Promise<Respo
   });
 }
 
-const MAX_RETRIES = 2;
-const RETRY_DELAYS = [3_000, 6_000];
+// Transient HTTP status codes that should be retried.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
-function isRetryable(err: unknown): boolean {
+// Base delays (ms) for exponential back-off. Actual delay = base × jitter(0.7–1.3).
+const RETRY_BASE_DELAYS = [5_000, 15_000, 30_000, 60_000];
+const MAX_RETRIES = RETRY_BASE_DELAYS.length; // 4 attempts after the first
+
+/** Full-jitter sleep: uniform random in [base * 0.7, base * 1.3]. */
+function jitteredDelay(base: number): number {
+  return Math.round(base * (0.7 + Math.random() * 0.6));
+}
+
+function isRetryableError(err: unknown): boolean {
   if (err instanceof Error) {
     if (err.name === "AbortError" || err.name === "TimeoutError") return true;
     const msg = err.message.toLowerCase();
-    if (msg.includes("fetch failed") || msg.includes("econnreset") ||
-        msg.includes("econnrefused") || msg.includes("socket hang up") ||
-        msg.includes("network")) return true;
+    return (
+      msg.includes("fetch failed") ||
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("socket hang up") ||
+      msg.includes("network")
+    );
   }
   return false;
 }
@@ -146,8 +181,15 @@ function friendlyError(err: unknown): string {
 }
 
 /**
- * Call the LLM with automatic concurrency limiting, retry (429 / network / timeout),
- * and JSON sanitisation. Throws on non-recoverable errors.
+ * Call the LLM with automatic concurrency limiting, exponential back-off with
+ * full jitter for transient HTTP errors (429 / 5xx) and network failures,
+ * and JSON payload sanitisation. Throws on non-recoverable errors.
+ *
+ * Retry strategy:
+ *  - Up to MAX_RETRIES retries (4), total 5 attempts
+ *  - Transient HTTP codes: 429, 500, 502, 503, 504
+ *  - Network / timeout errors are also retried
+ *  - Delay uses exponential back-off with ±30% jitter to avoid thundering herd
  */
 export async function callLLM(
   prompt: string,
@@ -170,45 +212,58 @@ export async function callLLM(
       );
     }
 
-    let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const isLastAttempt = attempt === MAX_RETRIES;
+      const baseDelay = RETRY_BASE_DELAYS[attempt] ?? RETRY_BASE_DELAYS[RETRY_BASE_DELAYS.length - 1];
+
+      let res: Response;
       try {
-        let res = await doFetch(url, body, config.apiKey);
-
-        if (res.status === 429) {
-          const delay = RETRY_DELAYS[attempt] ?? 6_000;
-          if (verbose) process.stderr.write(`[llm] 429 rate-limited, retry in ${delay / 1000}s...\n`);
-          await new Promise((r) => setTimeout(r, delay));
-          res = await doFetch(url, body, config.apiKey);
-        }
-
-        if (!res.ok) {
-          const err = await res.text().catch(() => "");
-          throw new Error(`LLM API error ${res.status}: ${err.slice(0, 300)}`);
-        }
-
-        const data = (await res.json()) as {
-          choices: { message: { content: string } }[];
-        };
-        const result = data.choices[0]?.message?.content ?? "";
-
-        if (verbose) {
-          process.stderr.write(`[llm] response_chars=${result.length}\n`);
-        }
-
-        return result;
-      } catch (err) {
-        lastErr = err;
-        if (attempt < MAX_RETRIES && isRetryable(err)) {
-          const delay = RETRY_DELAYS[attempt] ?? 3_000;
-          if (verbose) process.stderr.write(`[llm] ${friendlyError(err)} — retry ${attempt + 1}/${MAX_RETRIES} in ${delay / 1000}s...\n`);
+        res = await doFetch(url, body, config.apiKey);
+      } catch (fetchErr) {
+        if (!isLastAttempt && isRetryableError(fetchErr)) {
+          const delay = jitteredDelay(baseDelay);
+          if (verbose) process.stderr.write(
+            `[llm] ${friendlyError(fetchErr)} — retry ${attempt + 1}/${MAX_RETRIES} in ${(delay / 1000).toFixed(1)}s\n`
+          );
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
-        throw new Error(friendlyError(err));
+        throw new Error(friendlyError(fetchErr));
       }
+
+      // Transient server-side errors — retry via the loop (not inline)
+      if (RETRYABLE_STATUS.has(res.status)) {
+        if (!isLastAttempt) {
+          const delay = jitteredDelay(baseDelay);
+          if (verbose) process.stderr.write(
+            `[llm] HTTP ${res.status} — retry ${attempt + 1}/${MAX_RETRIES} in ${(delay / 1000).toFixed(1)}s\n`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        const body2 = await res.text().catch(() => "");
+        throw new Error(`LLM API error ${res.status}: ${body2.slice(0, 300)}`);
+      }
+
+      if (!res.ok) {
+        const body2 = await res.text().catch(() => "");
+        throw new Error(`LLM API error ${res.status}: ${body2.slice(0, 300)}`);
+      }
+
+      const data = (await res.json()) as {
+        choices: { message: { content: string } }[];
+      };
+      const result = data.choices[0]?.message?.content ?? "";
+
+      if (verbose) {
+        process.stderr.write(`[llm] response_chars=${result.length}\n`);
+      }
+
+      return result;
     }
-    throw new Error(friendlyError(lastErr));
+
+    // Unreachable — loop always returns or throws.
+    throw new Error("LLM call failed after all retries.");
   } finally {
     releaseSlot();
   }

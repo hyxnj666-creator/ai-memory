@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.6.2] — 2026-04-28
+
+### New features
+
+- **Built-in free model** — `extract` now works out of the box with no API key configured. Falls back automatically to DeepSeek-V4-Flash via SiliconFlow (base64-encoded key, `builtinFallback: true` on `LLMConfig`). Limits: max 2 conversations per run + max 20 chunks per conversation (uniform sampling — every Nth chunk is selected so the whole conversation breadth is covered, not just the opening turns). Users are shown a clear info banner with instructions to set their own key to remove the limits. `resolveAiConfig` return type changed from `LLMConfig | null` to `LLMConfig` (never null); callers that previously handled null are updated.
+
+- **LLM retry overhaul** — previous retry logic had a structural bug: 429/503 used an inline single retry that fell through to a non-retryable throw if the second attempt also failed, so the outer `MAX_RETRIES` loop was never used for HTTP errors. New implementation:
+  - Single unified retry loop (`for attempt 0..MAX_RETRIES`)
+  - `RETRYABLE_STATUS = {429, 500, 502, 503, 504}` — all transient 5xx covered
+  - Exponential back-off base delays: `[5 000, 15 000, 30 000, 60 000]` ms (4 retries)
+  - Full jitter: each delay is `base × uniform(0.7, 1.3)` to prevent thundering herd when 6 concurrent chunks all hit a rate-limit simultaneously
+  - Request timeout reduced: 120 s → 60 s (fail fast, retry sooner)
+
+### Test suite: **585** (unchanged — retry path is integration-only; existing llm tests updated for new `resolveAiConfig` contract)
+
+---
+
+## [2.6.1] — 2026-04-27
+
+### Bug fix
+
+- Dashboard graph type-filter buttons caused `SyntaxError` in generated HTML due to broken quote escaping inside nested template literals. Fixed by using `data-type` attribute with `onclick="graphToggleType(this.dataset.type)"` instead of embedding the value as a string literal. No logic change.
+
+---
+
 ## [2.6.0] — 2026-04-27
 
 ### New features

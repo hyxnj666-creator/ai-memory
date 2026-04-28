@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { resolveAiConfig } from "../extractor/llm.js";
 
 describe("resolveAiConfig", () => {
-  it("returns null when no key is set", () => {
+  it("falls back to built-in key when no user key is set", () => {
     const old = {
       AI_REVIEW_API_KEY: process.env.AI_REVIEW_API_KEY,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -12,7 +12,10 @@ describe("resolveAiConfig", () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
 
-    expect(resolveAiConfig()).toBeNull();
+    const cfg = resolveAiConfig();
+    expect(cfg).not.toBeNull();
+    expect(cfg.builtinFallback).toBe(true);
+    expect(cfg.model).toBe("deepseek-ai/DeepSeek-V4-Flash");
 
     // Restore
     if (old.AI_REVIEW_API_KEY) process.env.AI_REVIEW_API_KEY = old.AI_REVIEW_API_KEY;

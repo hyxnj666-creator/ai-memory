@@ -59,7 +59,7 @@ Sample misses, sample false positives, the per-fixture detail, the v1.0 → v1.1
 - **Token savings** — `context` compresses thousands of turns into a focused prompt (typically 90%+ reduction vs. pasting raw history).
 - **Team-aware** — per-author subdirectories under `.ai-memory/{author}/`, no merge conflicts when two people commit memories from the same project.
 - **Cross-device portable** — `export` / `import` round-trip the whole store as a versioned JSON bundle.
-- **Zero config** — `npx ai-memory-cli init --with-mcp` and you're done.
+- **Zero config, zero API key** — `npx ai-memory-cli extract` works immediately with the built-in free model; set your own key to remove the 2-conversation limit.
 
 ---
 
@@ -119,23 +119,18 @@ conversation compression. Trigger list and full reasoning are in
 ## Quick Start
 
 ```bash
-# 30-second demo — no API key required.
-# Bootstraps a 3-memory hand-curated store in a tmp dir and prints the
-# AGENTS.md it generates (the file Cursor / Codex / Windsurf / Copilot all
-# read at session start). Cleans up afterwards.
-npx ai-memory-cli try
-
-# Set up API key (any OpenAI-compatible provider)
-export AI_REVIEW_API_KEY=sk-...    # or OPENAI_API_KEY
-
 # Initialise project (optionally register ai-memory as an MCP server)
 npx ai-memory-cli init --with-mcp
 
+# Extract — works out of the box with the built-in free model (no API key needed)
+# Limited to 2 conversations per run on the built-in key.
+npx ai-memory-cli extract
+
+# Unlock unlimited extractions — set your own key (any OpenAI-compatible provider)
+export AI_REVIEW_API_KEY=sk-...    # or OPENAI_API_KEY
+
 # One-shot health check — verifies editors, API key, store, MCP config
 npx ai-memory-cli doctor
-
-# Extract knowledge from all conversations
-npx ai-memory-cli extract
 
 # Search your knowledge base
 npx ai-memory-cli search "authentication"
@@ -203,6 +198,8 @@ npx ai-memory-cli extract --redact                  # scrub secrets / PII before
 npx ai-memory-cli extract --verbose                 # show LLM request details
 npx ai-memory-cli extract --json                    # JSON output (CI friendly)
 ```
+
+> **No API key?** `extract` automatically falls back to a built-in free model (DeepSeek-V4-Flash via SiliconFlow), limited to **2 conversations per run** and **20 chunks per conversation** (uniform sampling — covers full conversation breadth, not just the opening turns). Set `AI_REVIEW_API_KEY` or `OPENAI_API_KEY` to remove both limits.
 
 #### `--redact` — scrub secrets / PII / internal hostnames before sending to the LLM (v2.5+)
 
@@ -807,7 +804,8 @@ Add `.ai-memory/.state.json` to `.gitignore` — it tracks which conversations h
 ## Requirements
 
 - Node.js >= 18
-- An API key for any OpenAI-compatible provider, **or** a local LLM (Ollama / LM Studio)
+- **No API key required to get started** — a free built-in model (DeepSeek-V4-Flash via SiliconFlow) is used automatically when no key is configured, limited to 2 conversations per run.
+- For unlimited extractions: set `AI_REVIEW_API_KEY` (or `OPENAI_API_KEY`) to any OpenAI-compatible provider, or use a local LLM (Ollama / LM Studio).
 
 > **Tip:** Node.js 22+ enables richer conversation titles by reading Cursor/Windsurf's database. On Node 18-20, titles are extracted from the first message (still works fine).
 

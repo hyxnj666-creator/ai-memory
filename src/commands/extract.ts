@@ -24,6 +24,7 @@ import {
   printWarning,
 } from "../output/terminal.js";
 import { resolveAuthor } from "../utils/author.js";
+import { resolveAiConfig, BUILTIN_MAX_PICKS } from "../extractor/llm.js";
 
 const CONCURRENCY = 5;
 
@@ -37,7 +38,19 @@ export async function runExtract(opts: CliOptions): Promise<number> {
   // Types: CLI --type overrides config, config overrides default
   const effectiveTypes = opts.types ?? (config.extract.types.length > 0 ? config.extract.types : undefined);
 
-  // 0. Resolve author
+  // 0a. Resolve LLM config early to decide builtin-key path
+  const aiConfig = resolveAiConfig(config.model || undefined);
+  if (aiConfig.builtinFallback) {
+    if (!opts.json) {
+      console.log(
+        "ℹ  No API key configured — using built-in free model (DeepSeek-V4-Flash).\n" +
+        `   Limited to ${BUILTIN_MAX_PICKS} conversations this run.\n` +
+        "   Set AI_REVIEW_API_KEY (or OPENAI_API_KEY) to remove the limit.\n"
+      );
+    }
+  }
+
+  // 0b. Resolve author
   const author = await resolveAuthor(config, opts.author);
   if (!opts.json) console.log(`Extracting as: ${author}\n`);
 
@@ -76,6 +89,17 @@ export async function runExtract(opts: CliOptions): Promise<number> {
       }
     }
     return 0;
+  }
+
+  // Enforce builtin-key conversation cap
+  if (aiConfig.builtinFallback && allConversations.length > BUILTIN_MAX_PICKS) {
+    if (!opts.json) {
+      console.log(
+        `   (Built-in key: capping to first ${BUILTIN_MAX_PICKS} conversation(s).\n` +
+        "    Configure your own API key to process all conversations.)\n"
+      );
+    }
+    allConversations = allConversations.slice(0, BUILTIN_MAX_PICKS);
   }
 
   // dry-run: just list what would be processed — no LLM, no state changes

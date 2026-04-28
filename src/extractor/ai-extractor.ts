@@ -6,7 +6,7 @@ import type {
   RedactConfig,
 } from "../types.js";
 import { buildExtractionPrompt } from "./prompts.js";
-import { resolveAiConfig, callLLM } from "./llm.js";
+import { resolveAiConfig, callLLM, BUILTIN_MAX_CHUNKS } from "./llm.js";
 import { readAllMemories } from "../store/memory-store.js";
 import {
   buildRules,
@@ -482,9 +482,6 @@ export async function extractMemories(
   redactConfig?: RedactConfig
 ): Promise<ExtractionResult> {
   const config = resolveAiConfig(modelOverride);
-  if (!config) {
-    throw new Error("No AI API key found. Set AI_REVIEW_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.");
-  }
   const verbose = opts.verbose ?? false;
   const emptyStats: QualityStats = { total: 0, kept: 0, filteredShort: 0, filteredDuplicate: 0, filteredVague: 0, filteredExistingDup: 0, filteredSubsumed: 0 };
 
@@ -512,7 +509,23 @@ export async function extractMemories(
   const actualDate = new Date(conversation.meta.modifiedAt)
     .toISOString()
     .slice(0, 10);
-  const chunks = splitIntoChunks(text);
+  let chunks = splitIntoChunks(text);
+
+  // Built-in key: uniform sampling to keep cost and latency bounded.
+  // Uniform sampling (vs. truncation) covers the full conversation breadth:
+  // for a 93-chunk convo, every ~5th chunk is selected so decisions spread
+  // across the session are still captured, not just the opening exchanges.
+  if (config.builtinFallback && chunks.length > BUILTIN_MAX_CHUNKS) {
+    const step = chunks.length / BUILTIN_MAX_CHUNKS;
+    chunks = Array.from({ length: BUILTIN_MAX_CHUNKS }, (_, i) =>
+      chunks[Math.min(Math.round(i * step), chunks.length - 1)]
+    );
+    if (verbose) {
+      process.stderr.write(
+        `[builtin] sampled ${BUILTIN_MAX_CHUNKS} of ${chunks.length} chunks (uniform)\n`
+      );
+    }
+  }
 
   // Load existing memories for cross-extraction dedup
   let existingMemories: ExtractedMemory[] = [];

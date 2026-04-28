@@ -59,7 +59,7 @@ baseline doc 里完整公布了：sample misses、sample false positives、每�
 - **Token 节省** —— `context` 把上千轮对话压缩成精准 prompt（vs. 直接粘原始历史，通常省 90%+ token）。
 - **团队感知** —— `.ai-memory/{author}/` 按作者分目录，两个人在同一项目同时提交记忆不会冲突。
 - **跨设备搬运** —— `export` / `import` 把整库往返成版本化的 JSON bundle。
-- **零配置** —— `npx ai-memory-cli init --with-mcp` 一行搞定。
+- **零配置、零 API key** —— `npx ai-memory-cli extract` 即刻可用，内置免费模型；设置自己的 key 可解除 2 对话限制。
 
 ---
 
@@ -112,23 +112,18 @@ re-spike 触发条件见
 ## 快速开始
 
 ```bash
-# 30 秒 demo —— 零 API key 即可运行。
-# 在临时目录里加载内置的 3 条 hand-curated memory，跑一遍 rules
-# pipeline，把生成的 AGENTS.md（Cursor / Codex / Windsurf / Copilot 启动
-# 时都会读的那份文件）打印到屏幕，跑完自动清理。
-npx ai-memory-cli try
-
-# 设置 API key（任意 OpenAI 兼容提供商）
-export AI_REVIEW_API_KEY=sk-...    # 或 OPENAI_API_KEY
-
 # 初始化项目（可选：自动把 ai-memory 注册为 MCP server）
 npx ai-memory-cli init --with-mcp
 
+# 开箱即用，无需配置 API key —— 内置免费模型（DeepSeek-V4-Flash）
+# 每次运行限 2 个对话
+npx ai-memory-cli extract
+
+# 解锁无限制提取：配置自己的 API key（任意 OpenAI 兼容提供商）
+export AI_REVIEW_API_KEY=sk-...    # 或 OPENAI_API_KEY
+
 # 一键体检 — 检查编辑器、API key、存储、MCP 配置
 npx ai-memory-cli doctor
-
-# 提取所有对话中的知识
-npx ai-memory-cli extract
 
 # 搜索知识库
 npx ai-memory-cli search "认证"
@@ -199,6 +194,8 @@ npx ai-memory-cli extract --dry-run                # 预览（不调用 LLM）
 npx ai-memory-cli extract --verbose                # 显示 LLM 请求详情
 npx ai-memory-cli extract --json                   # JSON 输出（CI 友好）
 ```
+
+> **没有 API key？** `extract` 会自动使用内置免费模型（SiliconFlow DeepSeek-V4-Flash），限制为每次运行最多 **2 个对话**、每个对话最多 **20 个 chunk**（均匀采样——覆盖整个对话，而不只是开头部分）。设置 `AI_REVIEW_API_KEY` 或 `OPENAI_API_KEY` 即可解除限制。
 
 提取结束后会打印质量统计：过滤了多少低质量结果（内容过短或重复标题）。
 
@@ -342,6 +339,24 @@ npx ai-memory-cli context --all-authors            # 包含所有团队成员
 npx ai-memory-cli context --include-resolved       # 包含已归档的记忆
 ```
 
+**聚焦到某个对话** — 实际使用中通常只需要续接某一个对话，而不是把所有记忆全部倒出来：
+
+```bash
+# 1. 查看哪些对话产生了记忆
+npx ai-memory-cli context --list-sources
+#  #  Date        Source        ID        Count  Types              Title
+#  ------------------------------------------------------------------------------
+#   1  2026-04-27  cursor        b5677be8    12  D:4 A:3 C:5        推广
+#   2  2026-04-25  cursor        ff12abc3     7  A:4 T:3            tools
+
+# 2. 用 ID 前缀（像 git short hash）复制某个对话的上下文
+npx ai-memory-cli context --source-id b5677be8 --copy
+
+# 3. 或者按对话标题模糊匹配（有多个匹配时取最近的一个）
+npx ai-memory-cli context --convo "推广" --copy
+npx ai-memory-cli context --convo "推广" --all-matching --copy  # 合并所有匹配对话
+```
+
 默认模式（不加 `--summarize`）直接从记忆组装结构化块——即时、免费、无信息损失。将输出粘贴到新对话开头。
 
 ### `link` — 把 memory 关联到实现它的 git commit（v2.6）
@@ -368,6 +383,30 @@ npx ai-memory-cli init --unschedule                # 删除定时任务
 
 加上 `--with-mcp` 时，会生成/合并 `.cursor/mcp.json` 与 `.windsurf/mcp.json`，幂等安全。加上 `--schedule` 时，在 macOS（launchd）、Linux（crontab）或 Windows（Task Scheduler）注册每天 09:00 自动执行的定时提取任务——再也不用手动 `extract`。
 
+### `export` / `import` — 跨设备迁移记忆
+
+Cursor / Claude Code 的聊天记录存在各自机器的本地状态里，换台新笔记本就从零开始了。`export` / `import` 创建可移植的 JSON bundle，完整往返——相同的文件、相同的对话分组、在目标机器上 `context --source-id` 行为一致。
+
+```bash
+# 在旧机器上导出（可用 --source-id / --convo / --type 范围过滤）
+npx ai-memory-cli export --output backup.ai-memory.json
+npx ai-memory-cli export --source-id b5677be8 --output one-chat.json   # 只导出某个对话
+npx ai-memory-cli export --convo "优惠券" --output coupons.json        # 按标题匹配
+
+# 复制 / 提交 / 分享这个 JSON 文件
+
+# 在新机器上——先预览，再导入
+npx ai-memory-cli import backup.ai-memory.json --dry-run
+npx ai-memory-cli import backup.ai-memory.json               # 默认跳过重复项
+npx ai-memory-cli import teammate-bundle.json --author me    # 重新映射队友的记忆
+npx ai-memory-cli import stale.json --overwrite              # 用导入内容覆盖本地
+
+# 重建嵌入索引，让语义搜索 / MCP 对导入的记忆生效
+npx ai-memory-cli reindex
+```
+
+Bundle 格式有版本号（`version: 1`），导入是**幂等操作**——同一个 bundle 导入两次等于没操作（按 author + type + date + title 去重）。
+
 ### `dashboard` — 可视化面板
 
 在本地浏览器中浏览、搜索和可视化你的知识库：
@@ -380,8 +419,21 @@ npx ai-memory-cli dashboard --port 8080            # 自定义端口
 包含：
 - **总览页** — 统计卡片、月度时间线、作者分布、最近活动
 - **记忆浏览器** — 实时搜索、按类型/作者/状态过滤、点击查看详情
+- **对话** — 每个产生过记忆的对话单独一张卡片，一键 `context --source-id` 复制，方便从"哪次对话做了这个决策"直接跳到"在新会话里续接那次对话"
 - **知识图谱** — D3.js 力导向图，节点按类型着色，边连接同一对话来源或共享关键词
+- **质量** — 内容具体度分布直方图、模糊内容列表、重复/被包含对（由 v2.2 算法栈驱动）
 - **导出** — JSON、Obsidian（含 YAML frontmatter）、剪贴板
+
+#### 用新算法清理旧记忆
+
+如果你从旧版本升级，想对之前积累的模糊/重复记忆做一次回溯清理：
+
+```bash
+npx ai-memory-cli reindex --dedup --dry-run   # 预览会删哪些
+npx ai-memory-cli reindex --dedup             # 实际删除 + 更新索引
+```
+
+200 条以上的记忆库，通常能清掉 20–30% 的模糊/重复/被包含条目。
 
 ---
 
@@ -406,6 +458,19 @@ ai-memory 可以作为 **MCP Server** 运行，让 AI 编辑器（Cursor、Claud
 ### 配置
 
 在 Cursor MCP 配置中添加（`.cursor/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "npx",
+      "args": ["ai-memory-cli", "serve"]
+    }
+  }
+}
+```
+
+或在 Claude Code 中添加（`.claude/claude_desktop_config.json`）：
 
 ```json
 {
@@ -737,7 +802,8 @@ git commit && git push
 ## 环境要求
 
 - Node.js >= 18
-- 任意 OpenAI 兼容提供商的 API key，**或**本地 LLM（Ollama / LM Studio）
+- **无需 API key 即可上手** —— 未配置 key 时自动使用内置免费模型（SiliconFlow DeepSeek-V4-Flash），每次运行限 2 个对话。
+- 无限制提取：设置 `AI_REVIEW_API_KEY`（或 `OPENAI_API_KEY`）指向任意 OpenAI 兼容提供商，或使用本地 LLM（Ollama / LM Studio）。
 
 > **提示：** Node.js 22+ 可通过读取 Cursor/Windsurf 数据库获取更准确的对话标题。Node 18-20 会从首条消息提取标题（正常使用不受影响）。
 

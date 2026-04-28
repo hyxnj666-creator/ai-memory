@@ -1,6 +1,6 @@
 {
   "name": "ai-memory",
-  "version": "2.6.0",
+  "version": "2.6.2",
   "description": "Turn editor chat history (Cursor/Claude Code/Windsurf/Copilot/Codex) into typed Markdown memories + AGENTS.md + Cursor Rules + Anthropic Skills — local-first, git-trackable.",
   "author": {
     "name": "Conor Liu",

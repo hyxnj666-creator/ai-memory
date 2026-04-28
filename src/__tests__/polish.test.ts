@@ -52,10 +52,12 @@ describe("resolveAiConfig Anthropic handling", () => {
     }
   });
 
-  it("returns null when only Anthropic key set without base URL", () => {
+  it("falls back to built-in key when only Anthropic key set without base URL", () => {
     process.env.ANTHROPIC_API_KEY = "sk-ant-test";
     delete process.env.ANTHROPIC_BASE_URL;
-    expect(resolveAiConfig()).toBeNull();
+    const cfg = resolveAiConfig();
+    expect(cfg).not.toBeNull();
+    expect(cfg.builtinFallback).toBe(true);
   });
 
   it("works when Anthropic key has a custom base URL", () => {
