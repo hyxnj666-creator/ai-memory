@@ -807,6 +807,10 @@ git commit && git push
 
 > **提示：** Node.js 22+ 可通过读取 Cursor/Windsurf 数据库获取更准确的对话标题。Node 18-20 会从首条消息提取标题（正常使用不受影响）。
 
+## 社区
+
+- [Linux DO 讨论](https://linux.do) — 中文社区讨论帖
+
 ## License
 
 MIT — [Conor Liu](https://github.com/hyxnj666-creator)
