@@ -809,6 +809,10 @@ Add `.ai-memory/.state.json` to `.gitignore` — it tracks which conversations h
 
 > **Tip:** Node.js 22+ enables richer conversation titles by reading Cursor/Windsurf's database. On Node 18-20, titles are extracted from the first message (still works fine).
 
+## Community
+
+- [Linux DO Discussion](https://linux.do) — Chinese developer community thread
+
 ## License
 
 MIT — [Conor Liu](https://github.com/hyxnj666-creator)
